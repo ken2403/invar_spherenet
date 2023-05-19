@@ -6,9 +6,9 @@ import ase
 import ase.neighborlist
 import numpy as np
 import torch
-from torch import Tensor
 from ase.data import atomic_masses
 from numpy import ndarray
+from torch import Tensor
 from torch_geometric.data import Data, Dataset
 
 from .keys import GraphKeys

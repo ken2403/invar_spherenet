@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 import math
 import os
+from collections.abc import Callable
 
 import numpy as np
 import sympy
@@ -11,9 +11,8 @@ from torch import Tensor
 
 
 class SphericalBesselFunction(torch.nn.Module):
-    """
-    Calculate the spherical Bessel function based on the sympy + torch implementations
-    """
+    """Calculate the spherical Bessel function based on the sympy + torch
+    implementations."""
 
     def __init__(self, max_l: int = 6, max_n: int = 5, cutoff: float = 5.0, smooth: bool = False):
         """
@@ -40,8 +39,8 @@ class SphericalBesselFunction(torch.nn.Module):
 
     # @lru_cache(maxsize=128)
     def _calculate_symbolic_funcs(self) -> list[Callable]:
-        """
-        Spherical basis functions based on Rayleigh formula. This function generates symbolic formula.
+        """Spherical basis functions based on Rayleigh formula. This function
+        generates symbolic formula.
 
         Returns:
             symbolic_funcs (list): list of symbolic functions
@@ -88,7 +87,7 @@ class SphericalBesselFunction(torch.nn.Module):
         return [sympy.lambdify([r], sympy.simplify(f).evalf(), modules) for f in gnr]
 
     def _call_sbf(self, r: Tensor) -> Tensor:
-        roots = self.sb_roots[: self.max_l, : self.max_n]
+        roots = self.sb_roots[: self.max_l, : self.max_n]  # type: ignore # Since mypy cannnot determine sb_roots is Tensor # noqa: E501
 
         results = []
         factor = math.sqrt(2.0 / self.cutoff**3)
@@ -99,10 +98,10 @@ class SphericalBesselFunction(torch.nn.Module):
             results.append(
                 func(r[:, None] * root[None, :] / self.cutoff) * factor / torch.abs(func_add1(root[None, :]))
             )
-        return torch.stack(results, axis=-1)
+        return torch.stack(results, dim=1)
 
     def _call_smooth_sbf(self, r: Tensor) -> Tensor:
-        return torch.stack([i(r) for i in self.funcs], axis=-1)
+        return torch.stack([i(r) for i in self.funcs], dim=1)
 
     def forward(self, r: Tensor) -> Tensor:
         """
@@ -118,8 +117,8 @@ class SphericalBesselFunction(torch.nn.Module):
 
     @staticmethod
     def rbf_j0(r: Tensor, cutoff: float = 5.0, max_n: int = 3) -> Tensor:
-        """
-        Spherical Bessel function of order 0, ensuring the function value vanishes at cutoff
+        """Spherical Bessel function of order 0, ensuring the function value
+        vanishes at cutoff.
 
         Args:
             r (torch.Tensor): distance Tensor with (E) shape
@@ -135,9 +134,7 @@ class SphericalBesselFunction(torch.nn.Module):
 
 
 class SphericalHarmonicsFunction(torch.nn.Module):
-    """
-    Spherical Harmonics function based on sympy + torch implementations
-    """
+    """Spherical Harmonics function based on sympy + torch implementations."""
 
     def __init__(self, max_l: int, use_phi: bool = True):
         """
@@ -173,7 +170,7 @@ class SphericalHarmonicsFunction(torch.nn.Module):
         funcs = []
         for lval in range(self.max_l):
             if self.use_phi:
-                m_list = range(-lval, lval + 1)
+                m_list = list(range(-lval, lval + 1))
             else:
                 m_list = [0]
             for m in m_list:

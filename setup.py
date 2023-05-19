@@ -1,6 +1,6 @@
 import re
-from setuptools import find_packages, setup
 
+from setuptools import find_packages, setup
 
 with open("invarsphere/__init__.py", encoding="utf-8") as fd:
     for line in fd.readlines():
