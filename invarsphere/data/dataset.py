@@ -120,9 +120,9 @@ class BaseGraphDataset(Dataset):
 
     def _get_rot_matrix(self, nearest_vec: ndarray) -> ndarray:
         assert nearest_vec.shape == (2, 3)
-        cross = np.cross(nearest_vec[1], nearest_vec[0])
+        cross = np.cross(nearest_vec[0], nearest_vec[1])
         cross /= np.linalg.norm(cross)
-        q = np.concatenate([cross, nearest_vec], axis=0)
+        q = np.concatenate([nearest_vec, cross], axis=0)
         return q  # (3, 3) shape
 
     def _graphdata2atoms(self, data: Data) -> ase.Atoms:
