@@ -19,16 +19,17 @@ class Swish(nn.Module):
 
     def __init__(self, beta: float = 1.0, train_beta: bool = True):
         super().__init__()
+        self.train_beta = train_beta
         if train_beta:
-            self.beta_coeff = nn.Parameter(torch.tensor(float(beta)))
+            self.beta = nn.Parameter(torch.tensor(float(beta)))
         else:
-            self.register_buffer("beta_coeff", torch.tensor(float(beta)))
+            self.register_buffer("beta", torch.tensor(float(beta)))
 
     def extra_repr(self) -> str:
-        return f"beta={self.beta_coeff.item():.2f}"
+        return f"beta={self.beta.item():.2f}, trainable_beta:{self.train_beta}"
 
     def forward(self, x: Tensor) -> Tensor:
-        return x * torch.sigmoid(self.beta_coeff * x)
+        return x * torch.sigmoid(self.beta * x)
 
 
 class ShiftedSoftplus(nn.Module):

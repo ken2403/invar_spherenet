@@ -91,7 +91,12 @@ class ResidualLayer(nn.Module):
     """
 
     def __init__(
-        self, hidden_channels: int, n_layers: int = 2, activation: nn.Module | None = None, bias: bool = False, **kwargs
+        self,
+        hidden_channels: int,
+        n_layers: int = 2,
+        activation: nn.Module | None = None,
+        bias: bool = False,
+        **kwargs,
     ):
         super().__init__()
         self.n_layers = n_layers
@@ -121,7 +126,7 @@ class ResidualLayer(nn.Module):
                 ll.reset_parameters()
 
     def extra_repr(self) -> str:
-        return f"n_layers={self.n_layers}, bias={self.bias}"
+        return f"n_layers={self.n_layers}, bias={self.bias}, scale_factor={self.inv_sqrt_2:.2f}"
 
     def forward(self, inputs: Tensor) -> Tensor:
         x = self.dense_mlp(inputs)
