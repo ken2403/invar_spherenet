@@ -119,7 +119,10 @@ class BaseGraphDataset(Dataset):
         return data
 
     def _get_rot_matrix(self, nearest_vec: ndarray) -> ndarray:
-        assert nearest_vec.shape == (2, 3)
+        if nearest_vec.shape != (2, 3):
+            errm = f"nearest_vec must be (2, 3) shape, but got {nearest_vec.shape}"
+            logging.error(errm)
+            raise ValueError(errm)
         cross = np.cross(nearest_vec[0], nearest_vec[1])
         cross /= np.linalg.norm(cross)
         q = np.concatenate([nearest_vec, cross], axis=0)
