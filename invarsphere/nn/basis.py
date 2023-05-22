@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 from collections.abc import Callable
+from functools import lru_cache
 
 import numpy as np
 import sympy
@@ -33,11 +34,11 @@ class SphericalBesselFunction(torch.nn.Module):
 
         self.register_buffer("sb_roots", self._get_spherical_bessel_roots())
 
-    # @lru_cache(maxsize=128)
+    @lru_cache(maxsize=128)
     def _get_spherical_bessel_roots(self) -> Tensor:
         return torch.tensor(np.loadtxt(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sb_roots.txt")))
 
-    # @lru_cache(maxsize=128)
+    @lru_cache(maxsize=128)
     def _calculate_symbolic_funcs(self) -> list[Callable]:
         """Spherical basis functions based on Rayleigh formula. This function
         generates symbolic formula.
@@ -50,7 +51,7 @@ class SphericalBesselFunction(torch.nn.Module):
         funcs = [sympy.expand_func(sympy.functions.special.bessel.jn(i, r)) for i in range(self.max_l + 1)]
         return [sympy.lambdify(r, sympy.simplify(f).evalf(), modules) for f in funcs]
 
-    # @lru_cache(maxsize=128)
+    @lru_cache(maxsize=128)
     def _calculate_smooth_symbolic_funcs(self) -> list[Callable]:
         r = sympy.symbols("r")
         modules = {"sin": torch.sin, "cos": torch.cos, "sqrt": torch.sqrt, "exp": torch.exp}
