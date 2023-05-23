@@ -189,7 +189,59 @@ class SphericalHarmonicsFunction(torch.nn.Module):
             phi (torch.Tensor | None): the polar angle with (*) shape
 
         Returns:
-            shb (torch.Tensor): spherical harmonics basis with (*, max_l) shape if not use_phi, (*, 2*max_l) shape if use_phi
+            shb (torch.Tensor): spherical harmonics basis with (*, max_l) shape if not use_phi, (*, max_l*max_l) shape if use_phi
         """  # noqa: E501
         shb = torch.stack([f(theta, phi) for f in self.funcs], dim=-1)
         return shb
+
+
+def combine_sbb_shb(sbb: Tensor, shb: Tensor, max_n: int, max_l: int, use_phi: bool):
+    """Combine the spherical Bessel basis and the spherical Harmonics basis.
+    For the spherical Bessel function, the column is ordered by.
+
+        [n=[0, ..., max_n-1], n=[0, ..., max_n-1], ...], max_l blocks,
+
+    For the spherical Harmonics function, the column is ordered by
+        [m=[0], m=[-1, 0, 1], m=[-2, -1, 0, 1, 2], ...] max_l blocks, and each block has 2*l + 1
+        if use_phi is False, then the columns become
+        [m=[0], m=[0], ...] max_l columns
+
+    Args:
+        sbb (Tensor): spherical bessel basis results with (*, max_n*max_l) shape.
+        shb (Tensor): spherical harmonics basis results with (*, max_l) shape if not use_phi, (*, max_l*max_l) shape if use_phi.
+        max_n (int): max number of n.
+        max_l (int): max number of l.
+        use_phi (bool): whether to use phi.
+
+    Returns:
+        combined_sbf_shf (Tensor): combination of spherical bessel and spherical harmonics.
+    """  # noqa: E501
+    if sbb.size(0) == 0:
+        return sbb
+
+    device = sbb.device
+    if not use_phi:
+        repeats_sbb = torch.tensor([1] * max_l * max_n, device=device)
+        block_size = np.array([1] * max_l)
+    else:
+        # [1, 1, 1, ..., 1, 3, 3, 3, ..., 3, ... 5, ..., 2*max_l-1,...]
+        repeats_sbb = torch.tensor(np.repeat(2 * np.arange(max_l) + 1, repeats=max_n), device=device)
+        block_size = 2 * np.arange(max_l) + 1
+    expanded_sbb = torch.repeat_interleave(sbb, repeats=repeats_sbb, dim=-1)
+    expanded_shb = _block_repeat(shb, block_size=block_size, repeats=np.array([max_n] * max_l))
+    shape = max_n * max_l
+    if use_phi:
+        shape *= max_l
+    return (expanded_sbb * expanded_shb).view(-1, shape)
+
+
+def _block_repeat(t: Tensor, block_size: np.ndarray, repeats: np.ndarray) -> Tensor:
+    col_index = torch.arange(t.size(1))
+    indices = []
+    start = 0
+
+    for i, b in enumerate(block_size):
+        indices.append(torch.tile(col_index[start : start + b], (repeats[i],)))  # noqa: E203
+        start += b
+    indices_tensor = torch.cat(indices, dim=0).to(t.device).long()
+    return t[..., indices_tensor]
