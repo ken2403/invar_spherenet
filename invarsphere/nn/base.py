@@ -94,8 +94,9 @@ class ResidualLayer(nn.Module):
         self,
         hidden_channels: int,
         n_layers: int = 2,
-        activation: nn.Module | None = None,
         bias: bool = False,
+        activation: nn.Module | None = None,
+        weight_init: Callable[[Tensor], Tensor] | None = None,
         **kwargs,
     ):
         super().__init__()
@@ -109,6 +110,7 @@ class ResidualLayer(nn.Module):
                     hidden_channels,
                     bias=bias,
                     activation_name=activation,
+                    weight_init=weight_init,
                     **kwargs,
                 )
             )
