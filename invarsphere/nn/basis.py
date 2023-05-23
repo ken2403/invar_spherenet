@@ -181,7 +181,7 @@ class SphericalHarmonicsFunction(torch.nn.Module):
         results[0] = SphericalHarmonicsFunction._y00
         return results
 
-    def forward(self, theta: Tensor, phi: Tensor | None) -> Tensor:
+    def forward(self, theta: Tensor, phi: Tensor | None = None) -> Tensor:
         """Forward calculation of SphericalHarmonicsBasis.
 
         Args:
