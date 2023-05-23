@@ -14,3 +14,6 @@ class GraphKeys:
     Edge_shift = "edge_shift"  # (E, 3) shape
     Edge_dist = "edge_dist"  # (E) shape
     Edge_vec = "edge_vec"  # (E, 3) shape
+    Transformed_vec = "transformed_vec"  # (E, 3) shape
+    Theta = "theta"  # azimuthal angles with (E) shape
+    Phi = "phi"  # polar angles with (E) shape
