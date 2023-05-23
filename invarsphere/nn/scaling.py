@@ -150,7 +150,7 @@ class ScalingFactor(nn.Module):
         scale_file (str): Path to the json file where to store/load from the scaling factors.
     """
 
-    def __init__(self, scale_file: str, device=None):
+    def __init__(self, scale_file: str | None, device=None):
         super().__init__()
 
         self.scale_factor = torch.nn.Parameter(torch.tensor(1.0, device=device), requires_grad=False)
