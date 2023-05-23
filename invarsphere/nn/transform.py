@@ -21,34 +21,7 @@ class BaseTransform(ABC, nn.Module):
         return self.transform(graph)
 
 
-class RotationTransform(BaseTransform):
-    def __init__(self):
-        super().__init__()
-
-    def transform(self, graph: Batch) -> Batch:
-        """Rotation transform of edge vector.
-
-        Args:
-            graph (torch_geometric.data.Batch): material graph batch with following attributes:
-                rotation_matrix (torch.Tensor): the rotation matrix with (*, 3, 3) shape.
-                edge_vec (torch.Tensor): the arbitrary vector of (*, 3) shape.
-
-        Returns:
-            graph (torch_geometric.data.Batch): material graph batch with following attributes:
-                transformed_vec (torch.Tensor): the vector after rotation with (*, 3) shape.
-        """
-        rot_mat = graph[GraphKeys.Rot_mat]
-        vec = graph[GraphKeys.Edge_vec]
-
-        vec = torch.einsum("enm,em->en", rot_mat, vec)
-
-        graph[GraphKeys.Transformed_vec] = vec
-        return vec
-
-
-class CartToPolarTransform(BaseTransform):
-    """The layer that transform cartesian coordinates to polar coordinates."""
-
+class RotationPolarTransform(BaseTransform):
     def __init__(self):
         super().__init__()
 
@@ -57,19 +30,27 @@ class CartToPolarTransform(BaseTransform):
 
         Args:
             graph (torch_geometric.data.Batch): material graph batch with following attributes:
-                edge_vec (torch.Tensor): arbitrary cartesian vector with (*, 3) shape.
+                rotation_matrix (torch.Tensor): atom rotation matrix with (N, NB, 3, 3) shape.
+                edge_vec_ij (torch.Tensor): cartesian edge vector with (E, 3) shape.
 
         Returns:
             graph (torch_geometric.data.Batch): material graph batch with following attributes:
-                theta (torch.Tensor): the azimuthal angle with (*) shape.
-                phi (torch.Tensor): the polar angle with (*) shape.
+                theta (torch.Tensor): the azimuthal angle with (NB, E) shape.
+                phi (torch.Tensor): the polar angle with (NB, E) shape.
         """
-        vec = graph[GraphKeys.Edge_vec]
+        rot_mat = graph[GraphKeys.Rot_mat]  # (N, NB, 3, 3)
+        vec = graph[GraphKeys.Edge_vec_ij]  # (E, 3)
+        idx_i = graph[GraphKeys.Edge_idx][1]  # (E)
+        rot_mat = rot_mat[idx_i]  # (E, NB, 3, 3)
 
+        # ---------- rotation transform ----------
+        vec = torch.einsum("ebnm,em->ebn", rot_mat, vec)  # (E, NB, 3)
+
+        # ---------- cart to polar transform ----------
         vec = vec / vec.norm(dim=-1, keepdim=True)
-        theta = torch.atan2(vec[..., 0], vec[..., 1])
-        phi = torch.acos(vec[..., 2])
+        theta = torch.atan2(vec[..., 0], vec[..., 1])  # (E, NB)
+        phi = torch.acos(vec[..., 2])  # (E, NB)
 
-        graph[GraphKeys.Theta] = theta
-        graph[GraphKeys.Phi] = phi
+        graph[GraphKeys.Theta] = theta.transpose(0, 1)  # (NB, E)
+        graph[GraphKeys.Phi] = phi.transpose(0, 1)  # (NB, E)
         return graph
