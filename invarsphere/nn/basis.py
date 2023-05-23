@@ -99,18 +99,18 @@ class SphericalBesselFunction(torch.nn.Module):
             results.append(
                 func(r[:, None] * root[None, :] / self.cutoff) * factor / torch.abs(func_add1(root[None, :]))
             )
-        return torch.stack(results, dim=1)
+        return torch.stack(results, dim=-1)
 
     def _call_smooth_sbf(self, r: Tensor) -> Tensor:
-        return torch.stack([i(r) for i in self.funcs], dim=1)
+        return torch.stack([i(r) for i in self.funcs], dim=-1)
 
     def forward(self, r: Tensor) -> Tensor:
         """
         Args:
-            r (torch.Tensor): distance Tensor with (E) shape
+            r (torch.Tensor): distance Tensor with (*) shape
 
         Returns:
-            sbb (torch.Tensor): spherical Bessel basis with (E, max_n * max_l) shape
+            sbb (torch.Tensor): spherical Bessel basis with (*, max_n * max_l) shape
         """
         if self.smooth:
             return self._call_smooth_sbf(r)
@@ -191,5 +191,5 @@ class SphericalHarmonicsFunction(torch.nn.Module):
         Returns:
             shb (torch.Tensor): spherical harmonics basis with (*, max_l) shape if not use_phi, (*, 2*max_l) shape if use_phi
         """  # noqa: E501
-        shb = torch.stack([f(theta, phi) for f in self.funcs], dim=1)
+        shb = torch.stack([f(theta, phi) for f in self.funcs], dim=-1)
         return shb
