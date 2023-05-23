@@ -8,7 +8,8 @@ import torch
 from torch.nn.init import calculate_gain
 from torch_geometric.nn.inits import glorot, glorot_orthogonal
 
-from ..nn.activation import ScaledSiLU, ShiftedSoftplus, Swish
+from ..nn import activation as A
+from ..nn import cutoff as C
 
 
 def _normalize_string(s: str) -> str:
@@ -69,8 +70,8 @@ def activation_resolver(query: torch.nn.Module | str = "relu", **kwargs) -> torc
     acts = [
         act for act in vars(torch.nn.modules.activation).values() if isinstance(act, type) and issubclass(act, base_cls)
     ]
-    # add Swish, ShiftedSoftplus, ScaldSiLU
-    acts += [Swish, ShiftedSoftplus, ScaledSiLU]
+    # add original activations
+    acts += [act for act in vars(A).values() if isinstance(act, type) and issubclass(act, base_cls)]
     return _resolver(query, acts, base_cls, **kwargs)  # type: ignore # Since mypy cannot identify that _resolver returns a Module # noqa: E501
 
 
@@ -119,3 +120,15 @@ def init_resolver(query: Callable | str = "orthogonal") -> Callable[[torch.Tenso
 def init_param_resolver(query: Callable[[torch.Tensor], torch.Tensor]) -> tuple[str, ...]:
     params = query.__code__.co_varnames[: query.__code__.co_argcount]
     return params
+
+
+def cutoffnet_resolver(query: type[C.BaseCutoff] | str = "polynomialcutoff", **kwargs) -> C.BaseCutoff:
+    if isinstance(query, str):
+        query = _normalize_string(query)
+        if query[-6:] != "cutoff":
+            query += "cutoff"
+    base_cls: type = C.BaseCutoff
+    # cutoff netowork classes
+    cns = [cn for cn in vars(C).values() if isinstance(cn, type) and issubclass(cn, base_cls)]
+
+    return _resolver(query, cns, base_cls, True, **kwargs)  # type: ignore # Since mypy cannot identify that _resolver returns BaseCutoff # noqa: E501
