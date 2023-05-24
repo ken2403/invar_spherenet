@@ -90,13 +90,24 @@ class BaseGraphDataset(Dataset):
             s = np.concatenate([s, edge_shift[center_mask][sorted_ind][dist_mask][: self.max_neighbors]], axis=0)
             # rotation matrix
             rm_atom = np.zeros((1, 3, 3))
-            for i1 in range(self.n_neighbor_basis):
+            i1 = 0
+            cnt = 0
+            while cnt < self.n_neighgor_basis:
                 try:
                     nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
                 except IndexError:
                     errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {self.basis_cutoff}"  # noqa: E501
                     logging.error(errm)
                     raise IndexError(errm)
+                while np.isnan(nearest_vec).any():
+                    i1 += 1
+                    try:
+                        nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
+                    except IndexError:
+                        errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {self.basis_cutoff}"  # noqa: E501
+                        logging.error(errm)
+                        raise IndexError(errm)
+                cnt += 1
                 q = self._get_rot_matrix(nearest_vec)
                 rm_atom = np.concatenate([rm_atom, q.T[np.newaxis, ...]], axis=0)
             rm = np.concatenate([rm, rm_atom[1:][np.newaxis, ...]], axis=0)
@@ -128,6 +139,7 @@ class BaseGraphDataset(Dataset):
         cross = np.cross(nearest_vec[0], nearest_vec[1])
         cross /= np.linalg.norm(cross)
         q = np.concatenate([nearest_vec, cross[np.newaxis, :]], axis=0)
+        q, _ = np.linalg.qr(q)
         return q  # (3, 3) shape
 
     def _graphdata2atoms(self, data: Data) -> ase.Atoms:
