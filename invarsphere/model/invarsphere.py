@@ -12,11 +12,7 @@ from torch_scatter import scatter
 
 from ..data.keys import GraphKeys
 from ..nn.base import Dense, ResidualLayer
-from ..nn.basis import (
-    SphericalBesselFunction,
-    SphericalHarmonicsFunction,
-    combine_sbb_shb,
-)
+from ..nn.basis import SphericalBesselFunction, SphericalHarmonicsWithBessel
 from ..nn.cutoff import BaseCutoff
 from ..nn.scaling.compat import load_scales_compat
 from ..nn.scaling.scale_factor import ScaleFactor
@@ -64,9 +60,9 @@ class InvarianceSphereNet(BaseMPNN):
         self.direct_forces = direct_forces
 
         # basis layers
-        self.rbf = SphericalBesselFunction(max_l, max_n, cutoff, rbf_smooth)
-        self.cbf = SphericalHarmonicsFunction(max_l, False)
-        self.sbf = SphericalHarmonicsFunction(max_l, True)
+        self.rbf = SphericalBesselFunction(max_n, max_l, cutoff, rbf_smooth)
+        self.cbf = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, use_phi=False)
+        self.sbf = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, use_phi=True)
         cutoff_kwargs["cutoff"] = cutoff
         self.cutoff = cutoffnet_resolver(cutoff_net, **cutoff_kwargs)
 
@@ -278,29 +274,32 @@ class InvarianceSphereNet(BaseMPNN):
         idx_swap: Tensor = graph[GraphKeys.Edge_idx_swap]
 
         # ---------- Basis layers ----------
-        # rbf
+        # --- rbf ---
         rbf = self.rbf(d_ij)  # (E, n_rbf)
         rbf_h = self.mlp_rbf_h(rbf)  # (E, emb_size_rbf)
         rbf_out = self.mlp_rbf_out(rbf)  # (E, emb_size_rbf)
         rbf_mp = self.mlp_rbf(rbf)  # (E, emb_size_rbf)
 
-        # cbf & sbf
+        # --- cbf & sbf ---
         phi: Tensor = graph[GraphKeys.Phi]  # (NB, E)
         theta: Tensor = graph[GraphKeys.Theta]  # (NB, E)
-        NB, E = phi.size()
 
-        d_ij_proj = torch.sin(phi) * d_ij[None, ...]  # (NB, E)
+        # expand with NB dimension
+        NB, E = phi.size()
+        d_ij = d_ij.unsqueeze(0).expand(NB, E)
+        d_ij_proj = torch.sin(phi) * d_ij  # (NB, E)
+        # projected rbf
         rbf_proj = self.rbf(d_ij_proj.view(-1)).view(NB, E, -1)  # (NB, E, n_rbf)
         rbf_proj_mp = self.mlp_rbf_proj(rbf_proj)  # (NB, E, emb_size_rbf)
-        theta, phi = theta.view(-1), phi.view(-1)
-        cbf = self.cbf(theta).view(NB, E, -1)  # (NB, E, n_cbf)
-        cbf = combine_sbb_shb(rbf, cbf, self.max_n, self.max_l, False)  # (NB, E, max_n*max_l)
-        cbf_proj = combine_sbb_shb(rbf_proj, cbf, self.max_n, self.max_l, False)  # (NB, E, max_n*max_l)
+        # reshape to calculate basis
+        d_ij, d_ij_proj, theta, phi = d_ij.view(-1), d_ij_proj.view(-1), theta.view(-1), phi.view(-1)
+        cbf = self.cbf(d_ij, theta).view(NB, E, -1)  # (NB, E, max_n*max_l)
         cbf_mp = self.mlp_cbf(cbf)  # (NB, E, emb_size_cbf)
+        # projected cbf
+        cbf_proj = self.cbf(d_ij_proj, theta).view(NB, E, -1)  # (NB, E, max_n*max_l)
         cbf_proj_mp = self.mlp_cbf_proj(cbf_proj)  # (NB, E, emb_size_cbf)
-
-        sbf = self.sbf(theta, phi).view(NB, E, -1)  # (NB, E, n_sbf)
-        sbf = combine_sbb_shb(rbf, sbf, self.max_n, self.max_l, True)  # (NB, E, max_n*max_l**2)
+        # sbf
+        sbf = self.sbf(d_ij, theta, phi).view(NB, E, -1)  # (NB, E, max_n*max_l*max_l)
         sbf_mp = self.mlp_sbf(sbf)  # (NB, E, emb_size_sbf)
 
         # ---------- EmbeddingBlock and OutputBlock----------

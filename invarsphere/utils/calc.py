@@ -2,8 +2,22 @@
 
 from __future__ import annotations
 
+import numpy as np
 import torch
+from torch import Tensor
 from torch_scatter import segment_csr
+
+
+def block_repeat(t: Tensor, block_size: np.ndarray, repeats: np.ndarray) -> Tensor:
+    col_index = torch.arange(t.size(1))
+    indices = []
+    start = 0
+
+    for i, b in enumerate(block_size):
+        indices.append(torch.tile(col_index[start : start + b], (repeats[i],)))  # noqa: E203
+        start += b
+    indices_tensor = torch.cat(indices, dim=0).to(t.device).long()
+    return t[..., indices_tensor]
 
 
 def repeat_blocks(
