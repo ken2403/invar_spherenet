@@ -106,7 +106,7 @@ class ResidualLayer(nn.Module):
         self.hidden_features = hidden_features
         self.n_layers = n_layers
         self.bias = bias
-        self.activation = activation.__name__ if activation is not None else None
+        self.activation_name = activation.__class__.__name__ if activation is not None else None
         self.weight_init = weight_init
         self.bias_init = bias_init
 
@@ -141,7 +141,7 @@ class ResidualLayer(nn.Module):
         return "ResidualLayer(hidden_channels={}, bias={}, activation={}, weight_init={}{}, bias_init={})".format(
             self.hidden_features,
             self.bias,
-            self.activation,
+            self.activation_name,
             self.weight_init.__name__ if self.weight_init is not None else None,
             weight_init_key if self.weight_init is not None else "",
             self.bias_init.__name__ if self.bias_init is not None else None,
