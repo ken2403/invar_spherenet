@@ -35,16 +35,18 @@ class InvarianceSphereNet(BaseMPNN):
         n_targets: int,
         max_n: int,
         max_l: int,
-        cutoff: float,
         rbf_smooth: bool = True,
+        cutoff: float = 6.0,
         cutoff_net: str | type[BaseCutoff] = "envelope",
         cutoff_kwargs: dict[str, Any] = {},
         n_residual_output: int = 2,
         max_z: int | None = None,
+        extensive: bool = True,
+        regress_forces: bool = True,
+        direct_forces: bool = True,
         activation: str | nn.Module = "scaledsilu",
         weight_init: str | Callable[[Tensor], Tensor] | None = None,
-        extensive: bool = True,
-        direct_forces: bool = True,
+        scale_file: str | None = None,
     ):
         super().__init__()
         act = activation_resolver(activation)
@@ -56,6 +58,7 @@ class InvarianceSphereNet(BaseMPNN):
         self.max_l = max_l
         self.rbf_smooth = rbf_smooth
         self.extensive = extensive
+        self.regress_forces = regress_forces
         self.direct_forces = direct_forces
 
         # basis layers
@@ -105,6 +108,9 @@ class InvarianceSphereNet(BaseMPNN):
         )
 
     def forward(self, graph: Batch):
+        if self.regress_forces and not self.direct_forces:
+            graph[GraphKeys.Pos].requires_grad_(True)
+
         graph = self.calc_atomic_distances(graph, return_vec=True)
         graph = self.rot_transform(graph)
 
@@ -182,31 +188,27 @@ class InvarianceSphereNet(BaseMPNN):
         else:
             E_i = scatter(E_i, batch_idx, dim=0, dim_size=B, reduce="mean")
 
-        if self.direct_forces:
-            N = z.size(0)
-            # if self.forces_coupled:  # enforce F_abs_ji = F_ca
-            #     E = id_c.shape[0]
-            #     F_ca = scatter(F_ca, id_undir, dim=0, dim_size=int(E / 2), reduce="mean")  # (E/2, n_targets)
-            #     F_ca = F_ca[id_undir]  # (E, n_targets)
-
-            # map forces in edge directions
-            dir_ij = graph[GraphKeys.Edge_dir_ij]
-            F_ij = F_ij[:, :, None] * dir_ij[:, None, :]  # (E, n_targets, 3)
-            F_ij = scatter(F_ij, idx_i, dim=0, dim_size=N, reduce="add")  # (N, n_targets, 3)
-        else:
-            if self.n_targets > 1:
-                # maybe this can be solved differently
-                F_ij = torch.stack(
-                    [
-                        -torch.autograd.grad(E_i[:, i].sum(), graph[GraphKeys.Pos], create_graph=True)[0]
-                        for i in range(self.n_targets)
-                    ],
-                    dim=1,
-                )
+        if self.regress_forces:
+            if self.direct_forces:
+                # map forces in edge directions
+                dir_ij = graph[GraphKeys.Edge_dir_ij]
+                F_ij = F_ij[:, :, None] * dir_ij[:, None, :]  # (E, n_targets, 3)
+                F_ij = scatter(F_ij, idx_i, dim=0, dim_size=z.size(0), reduce="add")  # (N, n_targets, 3)
+                F_ij = F_ij.squeeze(1)  # (N, 3)
             else:
-                F_ij = -torch.autograd.grad(E_i.sum(), graph[GraphKeys.Pos], create_graph=True)[0]
+                if self.n_targets > 1:
+                    # maybe this can be solved differently
+                    F_ij = torch.stack(
+                        [
+                            -torch.autograd.grad(E_i[:, i].sum(), graph[GraphKeys.Pos], create_graph=True)[0]
+                            for i in range(self.n_targets)
+                        ],
+                        dim=1,
+                    )  # (N, n_targets, 3)
+                else:
+                    F_ij = -torch.autograd.grad(E_i.sum(), graph[GraphKeys.Pos], create_graph=True)[0]  # (N, 3)
 
-            graph[GraphKeys.Pos].requires_grad = False
+                graph[GraphKeys.Pos].requires_grad = False
 
         return E_i, F_ij
 
