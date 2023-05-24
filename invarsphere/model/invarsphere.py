@@ -715,11 +715,11 @@ class QuadrupletInteraction(nn.Module):
 
         m_ij = self.mlp_m_cbf(m_ij)
         m_ij2 = m_ij * self.mlp_cbf(cbf)
-        m_ij = self.scale_cbf(m_ij2, m_ij)  # (NB, E, emb_size_edge)
+        m_ij = self.scale_cbf(m_ij2, ref=m_ij)  # (NB, E, emb_size_edge)
 
         m_ij = self.mlp_m_sbf(m_ij)
         m_ij2 = m_ij * self.mlp_sbf(sbf)
-        m_ij = self.scale_sbf(m_ij2, m_ij)  # (NB, E, emb_size_edge)
+        m_ij = self.scale_sbf(m_ij2, ref=m_ij)  # (NB, E, emb_size_edge)
 
         # ---------- Basis MP ----------
         # x = torch.stack([m_ij[i] for i in range(self.n_neighbor_basis)], dim=-1)
