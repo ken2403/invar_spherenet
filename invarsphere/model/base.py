@@ -22,7 +22,6 @@ class BaseMPNN(nn.Module):
             graph (torch_geometric.data.Batch): material graph batch with edge information:
                 edge_dist_ij (torch.Tensor): inter atomic distances of (E) shape.
                 edge_vec_ij (torch.Tensor): inter atomic vector from i to j atom of (E, 3) shape.
-                edge_dir_ij (torch.Tensor): edge direction from i to j atom of (E, 3) shape.
         """
         if graph.get(GraphKeys.Batch_idx) is not None:
             batch_ind = graph[GraphKeys.Batch_idx]
@@ -41,8 +40,6 @@ class BaseMPNN(nn.Module):
         graph[GraphKeys.Edge_dist] = torch.norm(edge_vec, dim=1)
         if return_vec:
             graph[GraphKeys.Edge_vec_ij] = edge_vec
-            edge_dir = edge_vec / edge_vec.norm(dim=-1, keepdim=True)
-            graph[GraphKeys.Edge_dir_ij] = edge_dir
         return graph
 
     @property
