@@ -66,8 +66,8 @@ class ScaledSiLU(torch.nn.Module):
         self.scale_factor = 1 / 0.6
         self._activation = torch.nn.SiLU()
 
-    def extra_repr(self) -> str:
-        return f"scale_factor={self.scale_factor:.2f}"
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(scale_factor={self.scale_factor:.2f})"
 
     def forward(self, x):
         return self._activation(x) * self.scale_factor
