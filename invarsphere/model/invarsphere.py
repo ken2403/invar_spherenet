@@ -18,7 +18,7 @@ from ..nn.basis import (
     combine_sbb_shb,
 )
 from ..nn.cutoff import BaseCutoff
-from ..nn.scaling import ScalingFactor
+from ..nn.scaling import ScaleFactor
 from ..utils.resolve import activation_resolver, cutoffnet_resolver, init_resolver
 from .base import BaseMPNN
 
@@ -45,7 +45,6 @@ class InvarianceSphereNet(BaseMPNN):
         weight_init: str | Callable[[Tensor], Tensor] | None = None,
         extensive: bool = True,
         direct_forces: bool = True,
-        scale_file: str | None = None,
     ):
         super().__init__()
         act = activation_resolver(activation)
@@ -94,16 +93,13 @@ class InvarianceSphereNet(BaseMPNN):
                     n_atom_emb=1,
                     activation=act,
                     weight_init=wi,
-                    scale_file=scale_file,
                 )
                 for _ in range(n_blocks)
             ]
         )
         self.out_blocks = nn.ModuleList(
             [
-                OutputBlock(
-                    emb_size, emb_size, emb_size_rbf, n_residual_output, n_targets, direct_forces, act, wi, scale_file
-                )
+                OutputBlock(emb_size, emb_size, emb_size_rbf, n_residual_output, n_targets, direct_forces, act, wi)
                 for _ in range(n_blocks + 1)
             ]
         )
@@ -289,7 +285,6 @@ class InteractionBlock(nn.Module):
         n_atom_emb: int,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
-        scale_file: str | None = None,
     ):
         super().__init__()
 
@@ -303,7 +298,6 @@ class InteractionBlock(nn.Module):
             n_neighbor_basis,
             activation,
             weight_init,
-            scale_file,
         )
         self.t_mp = TripletInteraction(
             emb_size_edge,
@@ -312,7 +306,6 @@ class InteractionBlock(nn.Module):
             n_neighbor_basis,
             activation,
             weight_init,
-            scale_file,
         )
 
         # ---------- Update Edge Embeddings ----------
@@ -333,7 +326,6 @@ class InteractionBlock(nn.Module):
             n_residual=n_atom_emb,
             activation=activation,
             weight_init=weight_init,
-            scale_file=scale_file,
         )
 
         # ---------- Update Edge Embeddings with Atom Embeddings ----------
@@ -412,7 +404,6 @@ class OutputBlock(nn.Module):
         direct_forces: bool,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
-        scale_file: str | None = None,
     ):
         super().__init__()
         self.emb_size_atom = emb_size_atom
@@ -425,13 +416,13 @@ class OutputBlock(nn.Module):
         self.dense_rbf = Dense(emb_size_rbf, emb_size_edge, bias=False, weight_init=weight_init)
 
         self.mlp_energy = self.get_mlp(emb_size_atom, n_residual, activation, weight_init)
-        self.scale_sum = ScalingFactor(scale_file=scale_file)
+        self.scale_sum = ScaleFactor()
         # do not add bias to final layer to enforce that prediction for an atom
         # without any edge embeddings is zero
         self.mlp_out_energy = Dense(emb_size_atom, n_targets, bias=False, weight_init=weight_init)
 
         if self.direct_forces:
-            self.scale_rbf = ScalingFactor(scale_file=scale_file)
+            self.scale_rbf = ScaleFactor()
             self.mlp_forces = self.get_mlp(emb_size_edge, n_residual, activation, weight_init)
             # no bias in final layer to ensure continuity
             self.mlp_out_forces = Dense(emb_size_edge, n_targets, bias=False, weight_init=weight_init)
@@ -469,7 +460,7 @@ class OutputBlock(nn.Module):
 
         # ---------- Energy Prediction ----------
         x_E = scatter(x, idx_i, dim=0, dim_size=N, reduce="add")  # (N, emb_size_edge)
-        x_E = self.scale_sum(m_ij, x_E)
+        x_E = self.scale_sum(x_E, ref=m_ij)
 
         for layer in self.mlp_energy:
             x_E = layer(x_E)  # (N, emb_size_atom)
@@ -478,7 +469,7 @@ class OutputBlock(nn.Module):
 
         # ---------- Force Prediction ----------
         if self.direct_forces:
-            x_F = self.scale_rbf(m_ij, x)
+            x_F = self.scale_rbf(x, ref=m_ij)
 
             for layer in self.mlp_forces:
                 x_F = layer(x_F)  # (E, emb_size_edge)
@@ -501,7 +492,6 @@ class QuadrupletInteraction(nn.Module):
         n_neighbor_basis: int,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
-        scale_file: str | None = None,
     ):
         super().__init__()
 
@@ -510,21 +500,21 @@ class QuadrupletInteraction(nn.Module):
             activation,
         )
         self.mlp_rbf = Dense(emb_size_rbf, emb_size_edge, bias=False, weight_init=weight_init)
-        self.scale_rbf = ScalingFactor(scale_file=scale_file)
+        self.scale_rbf = ScaleFactor()
 
         self.mlp_m_cbf = nn.Sequential(
             Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
         )
         self.mlp_cbf = Dense(emb_size_cbf, emb_size_edge, bias=False, weight_init=weight_init)
-        self.scale_cbf = ScalingFactor(scale_file=scale_file)
+        self.scale_cbf = ScaleFactor()
 
         self.mlp_m_sbf = nn.Sequential(
             Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
         )
         self.mlp_sbf = Dense(emb_size_sbf, emb_size_edge, bias=False, weight_init=weight_init)
-        self.scale_sbf = ScalingFactor(scale_file=scale_file)
+        self.scale_sbf = ScaleFactor()
 
         self.mlp_direction = nn.Sequential(
             Dense(emb_size_edge, emb_size_edge, False, weight_init),
@@ -557,17 +547,17 @@ class QuadrupletInteraction(nn.Module):
 
         m_ij = self.mlp_m_rbf(m_ij)
         m_ij2 = m_ij * self.mlp_rbf(rbf)
-        m_ij = self.scale_rbf(m_ij, m_ij2)  # (NB, E, emb_size_edge)
+        m_ij = self.scale_rbf(m_ij2, ref=m_ij)  # (NB, E, emb_size_edge)
 
         m_ij = self.mlp_m_cbf(m_ij)
         m_ij2 = m_ij * self.mlp_cbf(cbf)
-        m_ij = self.scale_cbf(m_ij, m_ij2)  # (NB, E, emb_size_edge)
+        m_ij = self.scale_cbf(m_ij2, m_ij)  # (NB, E, emb_size_edge)
 
         m_ij = self.mlp_m_sbf(m_ij)
         m_ij2 = m_ij * self.mlp_sbf(sbf)
-        m_ij = self.scale_sbf(m_ij, m_ij2)  # (NB, E, emb_size_edge)
+        m_ij = self.scale_sbf(m_ij2, m_ij)  # (NB, E, emb_size_edge)
 
-        # ---------- Dierction MP ----------
+        # ---------- Basis MP ----------
         # x = torch.stack([m_ij[i] for i in range(self.n_neighbor_basis)], dim=-1)
         x = m_ij.sum(0)  # (E, emb_size_edge)
         x = x * self.inv_sqrt_neighbor
@@ -594,7 +584,6 @@ class TripletInteraction(nn.Module):
         n_neighbor_basis: int,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
-        scale_file: str | None = None,
     ):
         super().__init__()
 
@@ -603,14 +592,14 @@ class TripletInteraction(nn.Module):
             activation,
         )
         self.mlp_rbf = Dense(emb_size_rbf, emb_size_edge, bias=False, weight_init=weight_init)
-        self.scale_rbf = ScalingFactor(scale_file=scale_file)
+        self.scale_rbf = ScaleFactor()
 
         self.mlp_m_cbf = nn.Sequential(
             Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
         )
         self.mlp_cbf = Dense(emb_size_cbf, emb_size_edge, bias=False, weight_init=weight_init)
-        self.scale_cbf = ScalingFactor(scale_file=scale_file)
+        self.scale_cbf = ScaleFactor()
 
         self.mlp_direction = nn.Sequential(
             Dense(emb_size_edge, emb_size_edge, False, weight_init),
@@ -642,13 +631,13 @@ class TripletInteraction(nn.Module):
 
         m_ij = self.mlp_m_rbf(m_ij)
         m_ij2 = m_ij * self.mlp_rbf(rbf)
-        m_ij = self.scale_rbf(m_ij, m_ij2)  # (NB, E, emb_size_edge)
+        m_ij = self.scale_rbf(m_ij2, ref=m_ij)  # (NB, E, emb_size_edge)
 
         m_ij = self.mlp_m_cbf(m_ij)
         m_ij2 = m_ij * self.mlp_cbf(cbf)
-        m_ij = self.scale_cbf(m_ij, m_ij2)  # (NB, E, emb_size_edge)
+        m_ij = self.scale_cbf(m_ij2, ref=m_ij)  # (NB, E, emb_size_edge)
 
-        # ---------- Dierction MP ----------
+        # ---------- Basis MP ----------
         # x = torch.stack([m_ij[i] for i in range(self.n_neighbor_basis)], dim=-1)
         x = m_ij.sum(0)  # (E, emb_size_edge)
         x = x * self.inv_sqrt_neighbor
@@ -675,7 +664,6 @@ class AtomEmbedding(nn.Module):
         n_residual: int,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
-        scale_file: str | None = None,
     ):
         super().__init__()
         self.emb_size_atom = emb_size_atom
@@ -684,7 +672,7 @@ class AtomEmbedding(nn.Module):
         self.n_residual = n_residual
 
         self.mlp_rbf = Dense(emb_size_rbf, emb_size_edge, False, weight_init)
-        self.scale_sum = ScalingFactor(scale_file=scale_file)
+        self.scale_sum = ScaleFactor()
 
         self.mlp = self.get_mlp(emb_size_atom, n_residual, activation, weight_init)
 
@@ -719,7 +707,7 @@ class AtomEmbedding(nn.Module):
         x = m_ij * mlp_rbf
 
         x2 = scatter(x, idx_i, dim=0, dim_size=N, reduce="add")
-        x = self.scale_sum(m_ij, x2)  # (N, emb_size_edge)
+        x = self.scale_sum(x2, ref=m_ij)  # (N, emb_size_edge)
 
         for layer in self.mlp:
             x = layer(x)  # (N, emb_size_atom)
