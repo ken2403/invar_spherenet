@@ -37,7 +37,7 @@ class SphericalBesselFunction(torch.nn.Module):
 
     def extra_repr(self) -> str:
         max_l = 0 if self.smooth else self.max_l
-        return f"max_n={self.max_n}, max_l={max_l}, cutoff={self.cutoff}, smooth={self.smooth}"
+        return f"max_n={self.max_n}, max_l={max_l}, cutoff={self.cutoff}, smooth={bool(self.smooth)}"
 
     @lru_cache(maxsize=128)
     def _get_spherical_bessel_roots(self) -> Tensor:
