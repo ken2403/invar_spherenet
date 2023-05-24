@@ -296,7 +296,6 @@ class InvarianceSphereNet(BaseMPNN):
         # expand with NB dimension
         NB, E = phi.size()
         d_ij = d_ij.unsqueeze(0).expand(NB, E)
-        rbf = rbf.unsqueeze(0).expand(NB, E, -1)
         rbf_mp = rbf_mp.unsqueeze(0).expand(NB, E, -1)
         # projected d_ij
         d_ij_proj = torch.sin(phi) * d_ij  # (NB, E)
