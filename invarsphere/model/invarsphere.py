@@ -263,10 +263,9 @@ class InvarianceSphereNet(BaseMPNN):
 
         z: Tensor = graph[GraphKeys.Z]
         d_ij: Tensor = graph[GraphKeys.Edge_dist]
-        if graph.get(GraphKeys.Batch_idx):
-            batch_idx: Tensor = graph[GraphKeys.Batch_idx]
-        else:
-            batch_idx = z.new_zeros(z.size(0), dtype=torch.long)
+        if graph.get(GraphKeys.Batch_idx) is None:
+            graph[GraphKeys.Batch_idx] = z.new_zeros(z.size(0), dtype=torch.long)
+        batch_idx: Tensor = graph[GraphKeys.Batch_idx]
         # order is "source_to_target" i.e. [index_j, index_i]
         idx: Tensor = graph[GraphKeys.Edge_idx]
         idx_j = idx[0]
