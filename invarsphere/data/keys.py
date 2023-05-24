@@ -6,6 +6,7 @@ class GraphKeys:
 
     Lattice = "lattice"  # lattice matrix of (B, 3, 3) shape
     PBC = "pbc"  # periodic boudary condition of (B, 3) shape
+    Neighbors = "neighbors"  # number of neighbor index per each image of (B) shape
 
     Batch_idx = "batch"  # batch index of (N) shape
     Z = "z"  # atomic number of (N) shape

@@ -108,6 +108,8 @@ class BaseGraphDataset(Dataset):
 
         # order is "source_to_target" i.e. [index_j, index_i]
         data = Data(edge_index=torch.stack([torch.LongTensor(edge_dst), torch.LongTensor(edge_src)], dim=0))
+
+        data[GraphKeys.Neighbors] = torch.tensor([edge_dst.size(0)])
         data[GraphKeys.Pos] = torch.tensor(atoms.get_positions(), dtype=torch.float32)
         data[GraphKeys.Z] = torch.tensor(atoms.numbers, dtype=torch.long)
         if self.n_neighbor_basis:
