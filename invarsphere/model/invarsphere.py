@@ -68,7 +68,7 @@ class InvarianceSphereNet(BaseMPNN):
         self.cbf = SphericalHarmonicsFunction(max_l, False)
         self.sbf = SphericalHarmonicsFunction(max_l, True)
         cutoff_kwargs["cutoff"] = cutoff
-        self.cn = cutoffnet_resolver(cutoff_net, **cutoff_kwargs)
+        self.cutoff = cutoffnet_resolver(cutoff_net, **cutoff_kwargs)
 
         # shared layers
         self.mlp_rbf = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)

@@ -35,6 +35,10 @@ class SphericalBesselFunction(torch.nn.Module):
 
         self.register_buffer("sb_roots", self._get_spherical_bessel_roots())
 
+    def extra_repr(self) -> str:
+        max_l = self.max_l if self.smooth else 0
+        return f"max_n={self.max_n}, max_l={max_l}, cutoff={self.cutoff}, smooth={self.smooth}"
+
     @lru_cache(maxsize=128)
     def _get_spherical_bessel_roots(self) -> Tensor:
         return torch.tensor(np.loadtxt(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sb_roots.txt")))
@@ -148,6 +152,9 @@ class SphericalHarmonicsFunction(torch.nn.Module):
         self.max_l = max_l
         self.use_phi = use_phi
         self.funcs = self._calculate_symbolic_funcs()
+
+    def extra_repr(self) -> str:
+        return f"max_l={self.max_l}, use_phi={self.use_phi}"
 
     @staticmethod
     def _y00(theta: Tensor, phi: Tensor) -> Tensor:
