@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from invarsphere.nn.basis import combine_sbb_shb
+from invarsphere.nn.basis import SphericalHarmonicsWithBessel
 
 
 @pytest.fixture(scope="module")
@@ -102,8 +102,10 @@ def test_combine_sbb_shb(
     use_phi: bool,
 ):
     E = 1  # number of edge is not important
+    cutoff = 5.0  # cutoff value is not important
     sbb, shb = sbb_shb(E, max_n, max_l, use_phi)
-    out = combine_sbb_shb(sbb, shb, max_n, max_l, use_phi)
+    sbb_shb = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, use_phi)
+    out = sbb_shb.combine_sbb_shb(sbb, shb)
     # shape test
     if use_phi:
         assert out.size() == (E, max_n * max_l * max_l)
