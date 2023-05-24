@@ -20,6 +20,7 @@ from ..nn.basis import (
 from ..nn.cutoff import BaseCutoff
 from ..nn.scaling.compat import load_scales_compat
 from ..nn.scaling.scale_factor import ScaleFactor
+from ..utils.calc import repeat_blocks
 from ..utils.resolve import activation_resolver, cutoffnet_resolver, init_resolver
 from .base import BaseMPNN
 
@@ -110,45 +111,162 @@ class InvarianceSphereNet(BaseMPNN):
 
         load_scales_compat(self, scale_file)
 
-    def rot_transform(self, graph: Batch) -> Batch:
+    def _select_symmetric_edges(self, tensor: Tensor, mask: Tensor, reorder_idx: Tensor, inverse_neg: bool) -> Tensor:
+        # Mask out counter-edges
+        tensor_directed = tensor[mask]
+        # Concatenate counter-edges after normal edges
+        sign = 1 - 2 * inverse_neg
+        tensor_cat = torch.cat([tensor_directed, sign * tensor_directed])
+        # Reorder everything so the edges of every image are consecutive
+        tensor_ordered = tensor_cat[reorder_idx]
+        return tensor_ordered
+
+    def _reorder_symmetric_edges(
+        self,
+        edge_index: Tensor,
+        cell_offsets: Tensor,
+        neighbors: Tensor,
+        edge_dist: Tensor,
+        edge_vector: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+        """Reorder edges to make finding counter-directional edges easier.
+
+        Some edges are only present in one direction in the data, since
+        every atom has a maximum number of neighbors. Since we only use
+        i->j edges here, we lose some j->i edges and add others by
+        making it symmetric. We could fix this by merging edge_index
+        with its counter-edges, including the cell_offsets, and then
+        running torch.unique. But this does not seem worth it.
+        """
+        # Generate mask
+        mask_sep_atoms = edge_index[0] < edge_index[1]
+        # Distinguish edges between the same (periodic) atom by ordering the cells
+        cell_earlier = (
+            (cell_offsets[:, 0] < 0)
+            | ((cell_offsets[:, 0] == 0) & (cell_offsets[:, 1] < 0))
+            | ((cell_offsets[:, 0] == 0) & (cell_offsets[:, 1] == 0) & (cell_offsets[:, 2] < 0))
+        )
+        mask_same_atoms = edge_index[0] == edge_index[1]
+        mask_same_atoms &= cell_earlier
+        mask = mask_sep_atoms | mask_same_atoms
+
+        # Mask out counter-edges
+        edge_index_new = edge_index[mask[None, :].expand(2, -1)].view(2, -1)
+
+        # Concatenate counter-edges after normal edges
+        edge_index_cat = torch.cat(
+            [
+                edge_index_new,
+                torch.stack([edge_index_new[1], edge_index_new[0]], dim=0),
+            ],
+            dim=1,
+        )
+
+        # Count remaining edges per image
+        batch_edge = torch.repeat_interleave(
+            torch.arange(neighbors.size(0), device=edge_index.device),
+            neighbors,
+        )
+        batch_edge = batch_edge[mask]
+        neighbors_new = 2 * torch.bincount(batch_edge, minlength=neighbors.size(0))
+
+        # Create indexing array
+        edge_reorder_idx = repeat_blocks(
+            neighbors_new // 2,
+            repeats=2,
+            continuous_indexing=True,
+            repeat_inc=edge_index_new.size(1),
+        )
+
+        # Reorder everything so the edges of every image are consecutive
+        edge_index_new = edge_index_cat[:, edge_reorder_idx]
+        cell_offsets_new = self._select_symmetric_edges(cell_offsets, mask, edge_reorder_idx, True)
+        edge_dist_new = self._select_symmetric_edges(edge_dist, mask, edge_reorder_idx, False)
+        edge_vector_new = self._select_symmetric_edges(edge_vector, mask, edge_reorder_idx, True)
+
+        return (
+            edge_index_new,
+            cell_offsets_new,
+            neighbors_new,
+            edge_dist_new,
+            edge_vector_new,
+        )
+
+    def _rot_transform(self, rot_mat: Tensor, vec_ij: Tensor, idx_i: Tensor) -> tuple[Tensor, Tensor]:
         """Cartesian to polar transform of edge vector.
 
         Args:
-            graph (torch_geometric.data.Batch): material graph batch with following attributes:
-                rotation_matrix (torch.Tensor): atom rotation matrix with (N, NB, 3, 3) shape.
-                edge_vec_ij (torch.Tensor): cartesian edge vector with (E, 3) shape.
+            rot_mat (torch.Tensor): atom rotation matrix with (N, NB, 3, 3) shape.
+            vec_ij (torch.Tensor): cartesian edge vector with (E, 3) shape.
+            idx_i (torch.Tensor): edge index of central atom i with (E) shape.
 
         Returns:
-            graph (torch_geometric.data.Batch): material graph batch with following attributes:
-                theta (torch.Tensor): the azimuthal angle with (NB, E) shape.
-                phi (torch.Tensor): the polar angle with (NB, E) shape.
+            theta (torch.Tensor): the azimuthal angle with (NB, E) shape.
+            phi (torch.Tensor): the polar angle with (NB, E) shape.
         """
-        rot_mat = graph[GraphKeys.Rot_mat]  # (N, NB, 3, 3)
-        vec = graph[GraphKeys.Edge_vec_ij]  # (E, 3)
-        idx_i = graph[GraphKeys.Edge_idx][1]  # (E)
         rot_mat = rot_mat[idx_i]  # (E, NB, 3, 3)
 
         # ---------- rotation transform ----------
-        vec = torch.einsum("ebnm,em->ebn", rot_mat, vec)  # (E, NB, 3)
+        rot_vec = torch.einsum("ebnm,em->ebn", rot_mat, vec_ij)  # (E, NB, 3)
 
         # ---------- cart to polar transform ----------
-        vec = vec / vec.norm(dim=-1, keepdim=True)
-        theta = torch.atan2(vec[..., 0], vec[..., 1])  # (E, NB)
-        phi = torch.acos(vec[..., 2])  # (E, NB)
+        rot_vec = rot_vec / rot_vec.norm(dim=-1, keepdim=True)
+        theta = torch.atan2(rot_vec[..., 0], rot_vec[..., 1])  # (E, NB)
+        phi = torch.acos(rot_vec[..., 2])  # (E, NB)
 
-        graph[GraphKeys.Theta] = theta.transpose(0, 1)  # (NB, E)
-        graph[GraphKeys.Phi] = phi.transpose(0, 1)  # (NB, E)
+        return theta.transpose(0, 1), phi.transpose(0, 1)  # (NB, E)
+
+    def generate_interaction_graph(self, graph: Batch) -> Batch:
+        graph = self.calc_atomic_distances(graph, return_vec=True)
+
+        edge_index: Tensor = graph[GraphKeys.Edge_idx]
+        cell_offsets: Tensor = graph[GraphKeys.Edge_shift]
+        neighbors: Tensor = graph[GraphKeys.Neighbors]
+        d_ij: Tensor = graph[GraphKeys.Edge_dist]
+        v_ij: Tensor = graph[GraphKeys.Edge_vec_ij]
+        (
+            edge_index,
+            cell_offsets,
+            neighbors,
+            d_ij,
+            v_ij,
+        ) = self._reorder_symmetric_edges(edge_index, cell_offsets, neighbors, d_ij, v_ij)
+        graph[GraphKeys.Edge_idx] = edge_index
+        graph[GraphKeys.Edge_shift] = cell_offsets
+        graph[GraphKeys.Neighbors] = neighbors
+        graph[GraphKeys.Edge_dist] = d_ij
+        graph[GraphKeys.Edge_vec_ij] = v_ij
+
+        # Indices for swapping c->a and a->c (for symmetric MP)
+        block_sizes = neighbors // 2
+        idx_swap = repeat_blocks(
+            block_sizes,
+            repeats=2,
+            continuous_indexing=False,
+            start_idx=block_sizes[0],
+            block_inc=block_sizes[:-1] + block_sizes[1:],
+            repeat_inc=-block_sizes,
+        )
+        graph[GraphKeys.Edge_idx_swap] = idx_swap
+
+        theta, phi = self._rot_transform(
+            graph[GraphKeys.Rot_mat],
+            v_ij,
+            edge_index[1],  # order is "source_to_target" i.e. [index_j, index_i]
+        )
+        graph[GraphKeys.Theta] = theta
+        graph[GraphKeys.Phi] = phi
+
         return graph
 
     def forward(self, graph: Batch):
         if self.regress_forces and not self.direct_forces:
             graph[GraphKeys.Pos].requires_grad_(True)
 
-        graph = self.calc_atomic_distances(graph, return_vec=True)
-        graph = self.rot_transform(graph)
+        graph = self.generate_interaction_graph(graph)
 
         z: Tensor = graph[GraphKeys.Z]
-        r_ij: Tensor = graph[GraphKeys.Edge_dist]
+        d_ij: Tensor = graph[GraphKeys.Edge_dist]
         if graph.get(GraphKeys.Batch_idx):
             batch_idx: Tensor = graph[GraphKeys.Batch_idx]
         else:
@@ -161,7 +279,7 @@ class InvarianceSphereNet(BaseMPNN):
 
         # ---------- Basis layers ----------
         # rbf
-        rbf = self.rbf(r_ij)  # (E, n_rbf)
+        rbf = self.rbf(d_ij)  # (E, n_rbf)
         rbf_h = self.mlp_rbf_h(rbf)  # (E, emb_size_rbf)
         rbf_out = self.mlp_rbf_out(rbf)  # (E, emb_size_rbf)
         rbf_mp = self.mlp_rbf(rbf)  # (E, emb_size_rbf)
@@ -171,8 +289,8 @@ class InvarianceSphereNet(BaseMPNN):
         theta: Tensor = graph[GraphKeys.Theta]  # (NB, E)
         NB, E = phi.size()
 
-        r_ij_proj = torch.sin(phi) * r_ij[None, ...]  # (NB, E)
-        rbf_proj = self.rbf(r_ij_proj.view(-1)).view(NB, E, -1)  # (NB, E, n_rbf)
+        d_ij_proj = torch.sin(phi) * d_ij[None, ...]  # (NB, E)
+        rbf_proj = self.rbf(d_ij_proj.view(-1)).view(NB, E, -1)  # (NB, E, n_rbf)
         rbf_proj_mp = self.mlp_rbf_proj(rbf_proj)  # (NB, E, emb_size_rbf)
         theta, phi = theta.view(-1), phi.view(-1)
         cbf = self.cbf(theta).view(NB, E, -1)  # (NB, E, n_cbf)
@@ -224,7 +342,7 @@ class InvarianceSphereNet(BaseMPNN):
         if self.regress_forces:
             if self.direct_forces:
                 # map forces in edge directions
-                dir_ij = graph[GraphKeys.Edge_dir_ij]
+                dir_ij = graph[GraphKeys.Edge_vec_ij] / graph[GraphKeys.Edge_vec_ij].norm(dim=-1, keepdim=True)
                 F_ij = F_ij[:, :, None] * dir_ij[:, None, :]  # (E, n_targets, 3)
                 F_ij = scatter(F_ij, idx_i, dim=0, dim_size=z.size(0), reduce="add")  # (N, n_targets, 3)
                 F_ij = F_ij.squeeze(1)  # (N, 3)
