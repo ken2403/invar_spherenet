@@ -85,9 +85,9 @@ class BaseGraphDataset(Dataset):
             dist_i = dist[center_mask]
             sorted_ind = np.argsort(dist_i)
             dist_mask = (dist_i <= self.cutoff)[sorted_ind]
-            idx_i = np.concatenate([idx_i, edge_src[center_mask][dist_mask][: self.max_neighbors]], axis=0)
-            idx_j = np.concatenate([idx_j, edge_dst[center_mask][dist_mask][: self.max_neighbors]], axis=0)
-            s = np.concatenate([s, edge_shift[center_mask][dist_mask][: self.max_neighbors]], axis=0)
+            idx_i = np.concatenate([idx_i, edge_src[center_mask][sorted_ind][dist_mask][: self.max_neighbors]], axis=0)
+            idx_j = np.concatenate([idx_j, edge_dst[center_mask][sorted_ind][dist_mask][: self.max_neighbors]], axis=0)
+            s = np.concatenate([s, edge_shift[center_mask][sorted_ind][dist_mask][: self.max_neighbors]], axis=0)
             # rotation matrix
             rm_atom = np.zeros((1, 3, 3))
             for i1 in range(self.n_neighbor_basis):
@@ -109,7 +109,7 @@ class BaseGraphDataset(Dataset):
         # order is "source_to_target" i.e. [index_j, index_i]
         data = Data(edge_index=torch.stack([torch.LongTensor(edge_dst), torch.LongTensor(edge_src)], dim=0))
 
-        data[GraphKeys.Neighbors] = torch.tensor([edge_dst.size(0)])
+        data[GraphKeys.Neighbors] = torch.tensor([edge_dst.shape[0]])
         data[GraphKeys.Pos] = torch.tensor(atoms.get_positions(), dtype=torch.float32)
         data[GraphKeys.Z] = torch.tensor(atoms.numbers, dtype=torch.long)
         if self.n_neighbor_basis:
@@ -127,7 +127,7 @@ class BaseGraphDataset(Dataset):
             raise ValueError(errm)
         cross = np.cross(nearest_vec[0], nearest_vec[1])
         cross /= np.linalg.norm(cross)
-        q = np.concatenate([nearest_vec, cross], axis=0)
+        q = np.concatenate([nearest_vec, cross[np.newaxis, :]], axis=0)
         return q  # (3, 3) shape
 
     def _graphdata2atoms(self, data: Data) -> ase.Atoms:
