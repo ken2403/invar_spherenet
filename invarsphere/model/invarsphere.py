@@ -284,7 +284,7 @@ class InvarianceSphereNet(BaseMPNN):
 
         # ---------- Basis layers ----------
         # --- rbf ---
-        rbf = self.rbf(d_ij)  # (E, n_rbf)
+        rbf = self.rbf(d_ij)  # (E, max_n)
         rbf_h = self.mlp_rbf_h(rbf)  # (E, emb_size_rbf)
         rbf_out = self.mlp_rbf_out(rbf)  # (E, emb_size_rbf)
         rbf_mp = self.mlp_rbf(rbf)  # (E, emb_size_rbf)
@@ -296,6 +296,9 @@ class InvarianceSphereNet(BaseMPNN):
         # expand with NB dimension
         NB, E = phi.size()
         d_ij = d_ij.unsqueeze(0).expand(NB, E)
+        rbf = rbf.unsqueeze(0).expand(NB, E, -1)
+        rbf_mp = rbf_mp.unsqueeze(0).expand(NB, E, -1)
+        # projected d_ij
         d_ij_proj = torch.sin(phi) * d_ij  # (NB, E)
         # reshape to calculate basis
         d_ij, d_ij_proj, theta, phi = d_ij.flatten(), d_ij_proj.flatten(), theta.flatten(), phi.flatten()
