@@ -6,7 +6,7 @@ import logging
 import math
 from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Callable, Optional, TypedDict, Union
+from typing import TypedDict
 
 import torch
 import torch.nn as nn
