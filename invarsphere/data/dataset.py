@@ -92,7 +92,7 @@ class BaseGraphDataset(Dataset):
             rm_atom = np.zeros((1, 3, 3))
             i1 = 0
             cnt = 0
-            while cnt < self.n_neighgor_basis:
+            while cnt < self.n_neighbor_basis:
                 try:
                     nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
                 except IndexError:
