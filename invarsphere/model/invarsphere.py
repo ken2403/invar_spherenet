@@ -24,7 +24,8 @@ from .base import BaseMPNN
 class InvarianceSphereNet(BaseMPNN):
     def __init__(
         self,
-        emb_size: int,
+        emb_size_atom: int,
+        emb_size_edge: int,
         emb_size_rbf: int,
         emb_size_cbf: int,
         emb_size_sbf: int,
@@ -68,22 +69,22 @@ class InvarianceSphereNet(BaseMPNN):
 
         # shared layers
         self.mlp_rbf = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
-        self.mlp_rbf_proj = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
-        self.mlp_cbf = Dense(max_n * max_l, emb_size_cbf, bias=False, weight_init=wi)
-        self.mlp_cbf_proj = Dense(max_n * max_l, emb_size_cbf, bias=False, weight_init=wi)
-        self.mlp_sbf = Dense(max_n * max_l * max_l, emb_size_sbf, bias=False, weight_init=wi)
         self.mlp_rbf_h = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
         self.mlp_rbf_out = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
+        self.mlp_cbf = Dense(max_n * max_l, emb_size_cbf, bias=False, weight_init=wi)
+        self.mlp_sbf = Dense(max_n * max_l * max_l, emb_size_sbf, bias=False, weight_init=wi)
+        self.mlp_rbf_proj = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
+        self.mlp_cbf_proj = Dense(max_n * max_l, emb_size_cbf, bias=False, weight_init=wi)
 
         # embedding block
-        self.emb_block = EmbeddingBlock(emb_size, emb_size, emb_size, max_z, True, act, wi)
+        self.emb_block = EmbeddingBlock(emb_size_atom, max_n, emb_size_edge, max_z, True, act, wi)
 
         # interaction and output blocks
         self.int_blocks = nn.ModuleList(
             [
                 InteractionBlock(
-                    emb_size,
-                    emb_size,
+                    emb_size_atom,
+                    emb_size_edge,
                     emb_size_rbf,
                     emb_size_cbf,
                     emb_size_sbf,
@@ -100,7 +101,16 @@ class InvarianceSphereNet(BaseMPNN):
         )
         self.out_blocks = nn.ModuleList(
             [
-                OutputBlock(emb_size, emb_size, emb_size_rbf, n_residual_output, n_targets, direct_forces, act, wi)
+                OutputBlock(
+                    emb_size_atom,
+                    emb_size_edge,
+                    emb_size_rbf,
+                    n_residual_output,
+                    n_targets,
+                    direct_forces,
+                    activation=act,
+                    weight_init=wi,
+                )
                 for _ in range(n_blocks + 1)
             ]
         )
@@ -292,15 +302,15 @@ class InvarianceSphereNet(BaseMPNN):
         # cbf
         cbf = self.cbf(d_ij, theta).view(NB, E, -1)  # (NB, E, max_n*max_l)
         cbf_mp = self.mlp_cbf(cbf)  # (NB, E, emb_size_cbf)
+        # sbf
+        sbf = self.sbf(d_ij, theta, phi).view(NB, E, -1)  # (NB, E, max_n*max_l*max_l)
+        sbf_mp = self.mlp_sbf(sbf)  # (NB, E, emb_size_sbf)
         # projected rbf
         rbf_proj = self.rbf(d_ij_proj).view(NB, E, -1)  # (NB, E, n_rbf)
         rbf_proj_mp = self.mlp_rbf_proj(rbf_proj)  # (NB, E, emb_size_rbf)
         # projected cbf
         cbf_proj = self.cbf(d_ij_proj, theta).view(NB, E, -1)  # (NB, E, max_n*max_l)
         cbf_proj_mp = self.mlp_cbf_proj(cbf_proj)  # (NB, E, emb_size_cbf)
-        # sbf
-        sbf = self.sbf(d_ij, theta, phi).view(NB, E, -1)  # (NB, E, max_n*max_l*max_l)
-        sbf_mp = self.mlp_sbf(sbf)  # (NB, E, emb_size_sbf)
 
         # ---------- EmbeddingBlock and OutputBlock----------
         # (N, emb_size) & (E, emb_size)
