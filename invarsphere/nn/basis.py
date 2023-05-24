@@ -194,7 +194,7 @@ class SphericalBesselFunction(nn.Module):
             results.append(
                 func(r[:, None] * root[None, :] / self.cutoff) * factor / torch.abs(func_add1(root[None, :]))
             )
-        return torch.stack(results, dim=-1)
+        return torch.cat(results, dim=-1)
 
     def _call_smooth_sbf(self, r: Tensor) -> Tensor:
         return torch.stack([i(r) for i in self.funcs], dim=-1)
