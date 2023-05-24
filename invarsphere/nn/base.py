@@ -55,7 +55,7 @@ class Dense(nn.Linear):
     def reset_parameters(self):
         if self.weight_init is not None:
             self.weight_init(self.weight, **self.kwargs)
-        if self.bias_init is not None:
+        if self.bias is not None and self.bias_init is not None:
             self.bias_init(self.bias)
 
     def extra_repr(self) -> str:
