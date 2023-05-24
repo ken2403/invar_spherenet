@@ -52,7 +52,7 @@ class CosineCutoff(BaseCutoff):
         return torch.where(r <= self.cutoff, cutoffs, torch.zeros_like(r))
 
 
-class Envelope(BaseCutoff):
+class EnvelopeCutoff(BaseCutoff):
     """Envelope function that ensures a smooth cutoff."""
 
     def __init__(self, cutoff: float, p: int = 5):
