@@ -33,6 +33,7 @@ class Dense(nn.Linear):
             raise ValueError("bias_init must not be None if set bias")
         self.bias_init = bias_init
         self.weight_init = weight_init
+        self.kwargs = kwargs
         # gain and scale paramer is set to default values
         if self.weight_init is not None:
             params = init_param_resolver(self.weight_init)
@@ -128,7 +129,7 @@ class ResidualLayer(nn.Module):
                 ll.reset_parameters()
 
     def extra_repr(self) -> str:
-        return f"n_layers={self.n_layers}, bias={self.bias}, scale_factor={self.inv_sqrt_2:.2f}"
+        return f"n_layers={self.n_layers}, bias={self.bias}, scale_after_residual={self.inv_sqrt_2:.2f}"
 
     def forward(self, inputs: Tensor) -> Tensor:
         x = self.dense_mlp(inputs)
