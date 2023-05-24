@@ -266,7 +266,7 @@ class InvarianceSphereNet(BaseMPNN):
         if graph.get(GraphKeys.Batch_idx):
             batch_idx: Tensor = graph[GraphKeys.Batch_idx]
         else:
-            batch_idx = torch.zeros_like(z, dtype=torch.long, device=z.device)
+            batch_idx = z.new_zeros(z.size(0), dtype=torch.long)
         # order is "source_to_target" i.e. [index_j, index_i]
         idx: Tensor = graph[GraphKeys.Edge_idx]
         idx_j = idx[0]
