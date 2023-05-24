@@ -23,6 +23,7 @@ class SphericalBesselFunction(torch.nn.Module):
             cutoff (float): cutoff radius
             smooth (bool): whether to use smooth version of spherical Bessel function
         """
+        super().__init__()
         self.max_l = max_l
         self.max_n = max_n
         self.cutoff = cutoff
@@ -143,6 +144,7 @@ class SphericalHarmonicsFunction(torch.nn.Module):
             max_l (int): max degree of spherical harmonics (excluding l)
             use_phi (bool): whether to use the polar angle. If not, the function will compute `Y_l^0` only
         """
+        super().__init__()
         self.max_l = max_l
         self.use_phi = use_phi
         self.funcs = self._calculate_symbolic_funcs()
