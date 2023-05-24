@@ -85,6 +85,10 @@ class BaseGraphDataset(Dataset):
             dist_i = dist[center_mask]
             sorted_ind = np.argsort(dist_i)
             dist_mask = (dist_i <= self.cutoff)[sorted_ind]
+            # center_mask to retrieve information on central atom i
+            # reorder by soreted_ind in order of distance
+            # extract only the information within the cutoff radius with dist_mask
+            # indexing to take out only the max_neighbor neighborhoods
             idx_i = np.concatenate([idx_i, edge_src[center_mask][sorted_ind][dist_mask][: self.max_neighbors]], axis=0)
             idx_j = np.concatenate([idx_j, edge_dst[center_mask][sorted_ind][dist_mask][: self.max_neighbors]], axis=0)
             s = np.concatenate([s, edge_shift[center_mask][sorted_ind][dist_mask][: self.max_neighbors]], axis=0)
@@ -107,6 +111,7 @@ class BaseGraphDataset(Dataset):
                         errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {self.basis_cutoff}"  # noqa: E501
                         logging.error(errm)
                         raise IndexError(errm)
+                i1 += 1
                 cnt += 1
                 q = self._get_rot_matrix(nearest_vec)
                 rm_atom = np.concatenate([rm_atom, q.T[np.newaxis, ...]], axis=0)
