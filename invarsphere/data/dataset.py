@@ -103,6 +103,7 @@ class BaseGraphDataset(Dataset):
                     errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {self.basis_cutoff}"  # noqa: E501
                     logging.error(errm)
                     raise IndexError(errm)
+                q = self._get_rot_matrix(nearest_vec)
                 while np.isnan(nearest_vec).any() or np.isnan(1).any():
                     i1 += 1
                     try:
