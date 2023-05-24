@@ -27,6 +27,7 @@ class BaseMPNN(nn.Module):
             batch_ind = graph[GraphKeys.Batch_idx]
         else:
             batch_ind = graph[GraphKeys.Pos].new_zeros(graph[GraphKeys.Pos].shape[0], dtype=torch.long)
+            graph[GraphKeys.Batch_idx] = batch_ind
 
         # order is "source_to_traget" i.e. [index_j, index_i]
         edge_j, edge_i = graph[GraphKeys.Edge_idx]
