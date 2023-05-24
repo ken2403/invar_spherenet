@@ -104,7 +104,7 @@ class BaseGraphDataset(Dataset):
                     logging.error(errm)
                     raise IndexError(errm)
                 q = self._get_rot_matrix(nearest_vec)
-                while np.isnan(nearest_vec).any() or np.isnan(q).any():
+                while np.isnan(q).any():
                     i1 += 1
                     try:
                         nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
