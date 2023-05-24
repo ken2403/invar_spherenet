@@ -591,7 +591,7 @@ class OutputBlock(nn.Module):
         mlp.append(Dense(self.emb_size_edge, units, False, weight_init))
         mlp.append(activation)
         for _ in range(n_residual):
-            mlp.append(ResidualLayer(units, n_layers=2, activation=activation, bias=False))
+            mlp.append(ResidualLayer(units, 2, False, activation=activation, weight_init=weight_init))
         return nn.ModuleList(mlp)
 
     def forward(self, h: Tensor, m_ij: Tensor, rbf: Tensor, idx_i: Tensor) -> tuple[Tensor, Tensor]:
@@ -840,7 +840,7 @@ class AtomEmbedding(nn.Module):
         mlp.append(Dense(self.emb_size_edge, units, False, weight_init))
         mlp.append(activation)
         for _ in range(n_residual):
-            mlp.append(ResidualLayer(units, n_layers=2, activation=activation, bias=False))
+            mlp.append(ResidualLayer(units, 2, False, activation=activation, weight_init=weight_init))
         return nn.ModuleList(mlp)
 
     def forward(self, h: Tensor, m_ij: Tensor, rbf: Tensor, idx_i: Tensor) -> Tensor:

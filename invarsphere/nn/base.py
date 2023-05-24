@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 import torch.nn as nn
 from torch import Tensor
@@ -54,17 +55,17 @@ class Dense(nn.Linear):
     def reset_parameters(self):
         if self.weight_init is not None:
             self.weight_init(self.weight, **self.kwargs)
-        if self.bias is not None:
+        if self.bias_init is not None:
             self.bias_init(self.bias)
 
     def extra_repr(self) -> str:
-        weight_init_key = ", ".join([f"{k}={v}" for k, v in self.kwargs.items()])
-        return "in_features={}, out_features={}, bias={}, weight_init={}({}), bias_init={}".format(
+        weight_init_key = "(" + ", ".join([f"{k}={v}" for k, v in self.kwargs.items()]) + ")"
+        return "in_features={}, out_features={}, bias={}, weight_init={}{}, bias_init={}".format(
             self.in_features,
             self.out_features,
             self.bias is not None,
             self.weight_init.__name__ if self.weight_init is not None else None,
-            weight_init_key,
+            weight_init_key if self.weight_init is not None else "",
             self.bias_init.__name__ if self.bias_init is not None else None,
         )
 
@@ -85,7 +86,7 @@ class ResidualLayer(nn.Module):
     """Residual block with output scaled by 1/sqrt(2).
 
     Args:
-        hidden_channels (int): hidden dimension of dense layer.
+        hidden_features (int): hidden dimension of dense layer.
         n_layers (int): Number of dense layers.
         activation (torch.nn.Module | None): activation function to use.
         bias (bool): whether to use bias in dense layer.
@@ -93,25 +94,31 @@ class ResidualLayer(nn.Module):
 
     def __init__(
         self,
-        hidden_channels: int,
+        hidden_features: int,
         n_layers: int = 2,
         bias: bool = False,
         activation: nn.Module | None = None,
         weight_init: Callable[[Tensor], Tensor] | None = None,
+        bias_init: Callable[[Tensor], Tensor] | None = nn.init.zeros_,
         **kwargs,
     ):
         super().__init__()
+        self.hidden_features = hidden_features
         self.n_layers = n_layers
         self.bias = bias
+        self.activation = activation.__name__ if activation is not None else None
+        self.weight_init = weight_init
+        self.bias_init = bias_init
+
         dense: list[nn.Module] = []
         for _ in range(n_layers):
             dense.append(
                 Dense(
-                    hidden_channels,
-                    hidden_channels,
+                    hidden_features,
+                    hidden_features,
                     bias=bias,
-                    activation_name=activation,
                     weight_init=weight_init,
+                    bias_init=bias_init,
                     **kwargs,
                 )
             )
@@ -119,6 +126,7 @@ class ResidualLayer(nn.Module):
                 dense.append(activation)
 
         self.dense_mlp = nn.Sequential(*dense)
+        self.kwargs: dict[str, Any] = dense[0].kwargs  # type: ignore # since mypy cannnot determine kwargs is dict
         self.inv_sqrt_2 = 1 / (2.0**0.5)
 
         self.reset_parameters()
@@ -128,8 +136,16 @@ class ResidualLayer(nn.Module):
             if hasattr(ll, "reset_parameters"):
                 ll.reset_parameters()
 
-    def extra_repr(self) -> str:
-        return f"n_layers={self.n_layers}, bias={self.bias}, scale_after_residual={self.inv_sqrt_2:.2f}"
+    def __repr__(self) -> str:
+        weight_init_key = "(" + ", ".join([f"{k}={v}" for k, v in self.kwargs.items()]) + ")"
+        return "ResidualLayer(hidden_channels={}, bias={}, activation={}, weight_init={}{}, bias_init={})".format(
+            self.hidden_features,
+            self.bias,
+            self.activation,
+            self.weight_init.__name__ if self.weight_init is not None else None,
+            weight_init_key if self.weight_init is not None else "",
+            self.bias_init.__name__ if self.bias_init is not None else None,
+        )
 
     def forward(self, inputs: Tensor) -> Tensor:
         x = self.dense_mlp(inputs)
