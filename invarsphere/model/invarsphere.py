@@ -289,11 +289,12 @@ class InvarianceSphereNet(BaseMPNN):
         d_ij_proj = torch.sin(phi) * d_ij  # (NB, E)
         # reshape to calculate basis
         d_ij, d_ij_proj, theta, phi = d_ij.flatten(), d_ij_proj.flatten(), theta.flatten(), phi.flatten()
+        # cbf
+        cbf = self.cbf(d_ij, theta).view(NB, E, -1)  # (NB, E, max_n*max_l)
+        cbf_mp = self.mlp_cbf(cbf)  # (NB, E, emb_size_cbf)
         # projected rbf
         rbf_proj = self.rbf(d_ij_proj).view(NB, E, -1)  # (NB, E, n_rbf)
         rbf_proj_mp = self.mlp_rbf_proj(rbf_proj)  # (NB, E, emb_size_rbf)
-        cbf = self.cbf(d_ij, theta).view(NB, E, -1)  # (NB, E, max_n*max_l)
-        cbf_mp = self.mlp_cbf(cbf)  # (NB, E, emb_size_cbf)
         # projected cbf
         cbf_proj = self.cbf(d_ij_proj, theta).view(NB, E, -1)  # (NB, E, max_n*max_l)
         cbf_proj_mp = self.mlp_cbf_proj(cbf_proj)  # (NB, E, emb_size_cbf)
