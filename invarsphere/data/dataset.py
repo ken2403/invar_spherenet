@@ -84,10 +84,10 @@ class BaseGraphDataset(Dataset):
             center_mask = edge_src == i
             dist_i = dist[center_mask]
             sorted_ind = np.argsort(dist_i)
-            dist_mask = (dist_i <= self.cutoff)[sorted_ind][: self.max_neighbors]
-            idx_i = np.concatenate([idx_i, edge_src[center_mask][dist_mask]], axis=0)
-            idx_j = np.concatenate([idx_j, edge_dst[center_mask][dist_mask]], axis=0)
-            s = np.concatenate([s, edge_shift[center_mask][dist_mask]], axis=0)
+            dist_mask = (dist_i <= self.cutoff)[sorted_ind]
+            idx_i = np.concatenate([idx_i, edge_src[center_mask][dist_mask][: self.max_neighbors]], axis=0)
+            idx_j = np.concatenate([idx_j, edge_dst[center_mask][dist_mask][: self.max_neighbors]], axis=0)
+            s = np.concatenate([s, edge_shift[center_mask][dist_mask][: self.max_neighbors]], axis=0)
             # rotation matrix
             rm_atom = np.zeros((1, 3, 3))
             for i1 in range(self.n_neighbor_basis):
