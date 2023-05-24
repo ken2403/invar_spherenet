@@ -208,8 +208,10 @@ class SphericalBesselFunction(nn.Module):
             sbb (torch.Tensor): spherical Bessel basis with (*, max_n * max_l) shape
         """
         if self.smooth:
-            return self._call_smooth_sbf(r)
-        return self._call_sbf(r)
+            sbb = self._call_smooth_sbf(r)
+        else:
+            sbb = self._call_sbf(r)
+        return sbb.to(r.dtype)
 
 
 class SphericalHarmonicsFunction(nn.Module):
@@ -275,4 +277,4 @@ class SphericalHarmonicsFunction(nn.Module):
             shb (torch.Tensor): spherical harmonics basis with (*, max_l) shape if not use_phi, (*, max_l*max_l) shape if use_phi
         """  # noqa: E501
         shb = torch.stack([f(theta, phi) for f in self.funcs], dim=-1)
-        return shb
+        return shb.to(theta.dtype)
