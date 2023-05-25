@@ -124,6 +124,7 @@ class InvarianceSphereNet(BaseMPNN):
             for i in range(1, n_blocks):
                 self.int_blocks[i].load_state_dict(copy.deepcopy(int_state_dict))
                 self.out_blocks[i].load_state_dict(copy.deepcopy(out_state_dict))
+            self.out_blocks[n_blocks].load_state_dict(copy.deepcopy(out_state_dict))
 
         load_scales_compat(self, scale_file)
 
