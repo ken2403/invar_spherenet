@@ -298,9 +298,7 @@ class InvarianceSphereNet(BaseMPNN):
 
         # expand with NB dimension
         NB, E = phi.size()
-        d_ij = d_ij.unsqueeze(0).expand(NB, E)
-        rbf3 = rbf3.unsqueeze(0)
-        rbf4 = rbf4.unsqueeze(0)
+        d_ij = d_ij.unsqueeze(0).expand(NB, E)  # (NB, E)
         # reshape to calculate basis
         d_ij, theta, phi = d_ij.flatten(), theta.flatten(), phi.flatten()
         # cbf
@@ -725,7 +723,7 @@ class QuadrupletInteraction(nn.Module):
         m_ij = self.scale_rbf(m_ij2, ref=m_ij)  # (1, E, emb_size_edge)
 
         NB, E, _ = cbf.size()
-        m_ij.expand(NB, E, -1)  # (NB, E, emb_size_edge)
+        m_ij = m_ij.expand(NB, E, -1)  # (NB, E, emb_size_edge)
         m_ij = self.mlp_m_cbf(m_ij)
         m_ij2 = m_ij * self.mlp_cbf(cbf)
         m_ij = self.scale_cbf(m_ij2, ref=m_ij)  # (NB, E, emb_size_edge)
@@ -821,7 +819,7 @@ class TripletInteraction(nn.Module):
         m_ij = self.scale_rbf(m_ij2, ref=m_ij)  # (1, E, emb_size_edge)
 
         NB, E, _ = cbf.size()
-        m_ij.expand(NB, E, -1)  # (NB, E, emb_size_edge)
+        m_ij = m_ij.expand(NB, E, -1)  # (NB, E, emb_size_edge)
         m_ij = self.mlp_m_cbf(m_ij)
         m_ij2 = m_ij * self.mlp_cbf(cbf)
         m_ij = self.scale_cbf(m_ij2, ref=m_ij)  # (NB, E, emb_size_edge)
