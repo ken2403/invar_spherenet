@@ -138,7 +138,7 @@ class ResidualLayer(nn.Module):
 
     def __repr__(self) -> str:
         weight_init_key = "(" + ", ".join([f"{k}={v}" for k, v in self.kwargs.items()]) + ")"
-        return "{}(hidden_channels={}, n_layers={}, bias={}, activation={}, weight_init={}{}, bias_init={})".format(
+        return "{}(hidden_features={}, n_layers={}, bias={}, activation={}, weight_init={}{}, bias_init={})".format(
             self.__class__.__name__,
             self.hidden_features,
             self.n_layers,
