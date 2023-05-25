@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import math
 from collections.abc import Callable
 from typing import Any
@@ -45,6 +46,7 @@ class InvarianceSphereNet(BaseMPNN):
         direct_forces: bool = True,
         activation: str | nn.Module = "scaledsilu",
         weight_init: str | Callable[[Tensor], Tensor] | None = None,
+        align_initial_weight: bool = True,
         scale_file: str | None = None,
     ):
         super().__init__()
@@ -59,6 +61,7 @@ class InvarianceSphereNet(BaseMPNN):
         self.extensive = extensive
         self.regress_forces = regress_forces
         self.direct_forces = direct_forces
+        self.align_initial_weight = align_initial_weight
 
         # basis layers
         self.rbf = SphericalBesselFunction(max_n, max_l, cutoff, rbf_smooth)
@@ -114,6 +117,13 @@ class InvarianceSphereNet(BaseMPNN):
                 for _ in range(n_blocks + 1)
             ]
         )
+
+        if align_initial_weight:
+            int_state_dict = self.int_blocks[0].get_state_dict()
+            out_state_dict = self.out_blocks[0].get_state_dict()
+            for i in range(1, n_blocks):
+                self.int_blocks[i].set_state_dict(copy.deepcopy(int_state_dict))
+                self.out_blocks[i].set_state_dict(copy.deepcopy(out_state_dict))
 
         load_scales_compat(self, scale_file)
 
@@ -499,6 +509,12 @@ class InteractionBlock(nn.Module):
         self.inv_sqrt_2 = 1 / (2.0**0.5)
         self.inv_sqrt_3 = 1 / (3.0**0.5)
 
+    def set_state_dict(self, state_dict: dict[str, Any]):
+        self.state_dict().update(state_dict)
+
+    def get_state_dict(self) -> dict[str, Any]:
+        return self.state_dict()
+
     def forward(
         self,
         h: Tensor,
@@ -602,6 +618,12 @@ class OutputBlock(nn.Module):
         for _ in range(n_residual):
             mlp.append(ResidualLayer(units, 2, False, activation=activation, weight_init=weight_init))
         return nn.ModuleList(mlp)
+
+    def set_state_dict(self, state_dict: dict[str, Any]):
+        self.state_dict().update(state_dict)
+
+    def get_state_dict(self) -> dict[str, Any]:
+        return self.state_dict()
 
     def forward(self, h: Tensor, m_ij: Tensor, rbf: Tensor, idx_i: Tensor) -> tuple[Tensor, Tensor]:
         """
