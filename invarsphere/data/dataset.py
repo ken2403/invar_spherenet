@@ -97,12 +97,15 @@ class BaseGraphDataset(Dataset):
             i1 = 0
             cnt = 0
             while cnt < self.n_neighbor_basis:
+                # nearest_vec has a coordinate component in the row direction
                 try:
                     nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
                 except IndexError:
                     errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {self.basis_cutoff}"  # noqa: E501
                     logging.error(errm)
                     raise IndexError(errm)
+                # Transpose to have a coordinate component in the column direction.
+                nearest_vec = nearest_vec.T
                 q = self._get_rot_matrix(nearest_vec)
                 while np.isnan(q).any():
                     i1 += 1
@@ -112,9 +115,12 @@ class BaseGraphDataset(Dataset):
                         errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {self.basis_cutoff}"  # noqa: E501
                         logging.error(errm)
                         raise IndexError(errm)
+                    # Transpose to have a coordinate component in the column direction.
+                    nearest_vec = nearest_vec.T
                     q = self._get_rot_matrix(nearest_vec)
                 cnt += 1
                 i1 += 1
+                # Transpose the original coordinates so that they can be transformed by matrix product
                 rm_atom = np.concatenate([rm_atom, q.T[np.newaxis, ...]], axis=0)
             rm = np.concatenate([rm, rm_atom[1:][np.newaxis, ...]], axis=0)
         edge_src = idx_i[1:]
@@ -138,13 +144,15 @@ class BaseGraphDataset(Dataset):
         return data
 
     def _get_rot_matrix(self, nearest_vec: ndarray) -> ndarray:
-        if nearest_vec.shape != (2, 3):
-            errm = f"nearest_vec must be (2, 3) shape, but got {nearest_vec.shape}"
+        # nearest_vec is matrix with coordinate components arranged in the column direction
+        if nearest_vec.shape != (3, 2):
+            errm = f"nearest_vec must be (3, 2) shape, but got {nearest_vec.shape}"
             logging.error(errm)
             raise ValueError(errm)
-        cross = np.cross(nearest_vec[0], nearest_vec[1])
+        nearest_vec = np.array(nearest_vec, dtype=np.float64)
+        cross = np.cross(nearest_vec[:, 0], nearest_vec[:, 1])
         cross /= np.linalg.norm(cross)
-        q = np.concatenate([nearest_vec, cross[np.newaxis, :]], axis=0)
+        q = np.concatenate([nearest_vec, cross[:, np.newaxis]], axis=1)
         q, _ = np.linalg.qr(q)
         return q  # (3, 3) shape
 
