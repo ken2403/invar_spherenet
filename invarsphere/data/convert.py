@@ -52,8 +52,8 @@ def atoms2graphdata(
     s = np.zeros((1, 3)) - 100
     if n_neighbor_basis:
         rm = np.zeros((1, n_neighbor_basis, 3, 3))
-        basis_idx_1 = np.zeros(1, dtype=int) - 100
-        basis_idx_2 = np.zeros(1, dtype=int) - 100
+        basis_idx_1 = np.zeros((1, n_neighbor_basis), dtype=int) - 100
+        basis_idx_2 = np.zeros((1, n_neighbor_basis), dtype=int) - 100
 
     n_ind = 0
     unique = np.unique(edge_src)
@@ -111,8 +111,8 @@ def atoms2graphdata(
                 i1 += 1
 
             rm = np.concatenate([rm, rm_atom[1:][np.newaxis, ...]], axis=0)
-            basis_idx_1 = np.concatenate([basis_idx_1, basis_idx_1_atom[1:]], axis=0)
-            basis_idx_2 = np.concatenate([basis_idx_2, basis_idx_2_atom[1:]], axis=0)
+            basis_idx_1 = np.concatenate([basis_idx_1, basis_idx_1_atom[1:][np.newaxis, ...]], axis=0)
+            basis_idx_2 = np.concatenate([basis_idx_2, basis_idx_2_atom[1:][np.newaxis, ...]], axis=0)
 
             # keep n_ind for basis edge_index
             n_ind += len(edge_src[center_mask][sorted_ind][dist_mask][:max_neighbors])
