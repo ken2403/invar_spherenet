@@ -160,7 +160,6 @@ class BaseGraphDataset(Dataset):
         cross /= np.linalg.norm(cross)
         # concatenate
         q = np.concatenate([nearest_vec, cross[:, np.newaxis]], axis=1)
-        q, _ = np.linalg.qr(q)
         return q  # (3, 3) shape
 
     def _graphdata2atoms(self, data: Data) -> ase.Atoms:
