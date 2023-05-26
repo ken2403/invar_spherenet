@@ -11,6 +11,7 @@ from .convert import atoms2graphdata, graphdata2atoms, set_properties
 class BaseGraphDataset(Dataset):
     def __init__(self, cutoff: float):
         super().__init__()
+        self.cutoff = cutoff
 
     def len(self) -> int:
         raise NotImplementedError
