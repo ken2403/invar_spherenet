@@ -88,6 +88,7 @@ def atoms2graphdata(
                 # Transpose to have a coordinate component in the column direction.
                 nearest_vec = nearest_vec.T
                 q = _schmidt_3d(nearest_vec)
+                # If two vectors are not first order independent, the q value become nan
                 while np.isnan(q).any():
                     i1 += 1
                     try:
