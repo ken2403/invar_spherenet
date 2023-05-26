@@ -30,6 +30,8 @@ class InvarianceSphereNet(BaseMPNN):
         emb_size_rbf: int,
         emb_size_cbf: int,
         emb_size_sbf: int,
+        emb_quad: int,
+        emb_triplet: int,
         n_neighbor_basis: int,
         n_blocks: int,
         n_targets: int,
@@ -91,6 +93,8 @@ class InvarianceSphereNet(BaseMPNN):
                     emb_size_rbf,
                     emb_size_cbf,
                     emb_size_sbf,
+                    emb_quad,
+                    emb_triplet,
                     n_neighbor_basis,
                     n_before_skip=1,
                     n_after_skip=1,
@@ -458,6 +462,8 @@ class InteractionBlock(nn.Module):
         emb_size_rbf: int,
         emb_size_cbf: int,
         emb_size_sbf: int,
+        emb_quad: int,
+        emb_triplet: int,
         n_neighbor_basis: int,
         n_before_skip: int,
         n_after_skip: int,
@@ -475,6 +481,7 @@ class InteractionBlock(nn.Module):
             emb_size_rbf,
             emb_size_cbf,
             emb_size_sbf,
+            emb_quad,
             n_neighbor_basis,
             activation,
             weight_init,
@@ -483,6 +490,7 @@ class InteractionBlock(nn.Module):
             emb_size_edge,
             emb_size_rbf,
             emb_size_cbf,
+            emb_triplet,
             n_neighbor_basis,
             activation,
             weight_init,
@@ -673,6 +681,7 @@ class QuadrupletInteraction(nn.Module):
         emb_size_rbf: int,
         emb_size_cbf: int,
         emb_size_sbf: int,
+        emb_quad: int,
         n_neighbor_basis: int,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
@@ -687,21 +696,21 @@ class QuadrupletInteraction(nn.Module):
         self.scale_rbf = ScaleFactor()
 
         self.mlp_m_cbf = nn.Sequential(
-            Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
+            Dense(emb_size_edge, emb_quad, bias=False, weight_init=weight_init),
             activation,
         )
-        self.mlp_cbf = Dense(emb_size_cbf, emb_size_edge, bias=False, weight_init=weight_init)
+        self.mlp_cbf = Dense(emb_size_cbf, emb_quad, bias=False, weight_init=weight_init)
         self.scale_cbf = ScaleFactor()
 
         self.mlp_m_sbf = nn.Sequential(
-            Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
+            Dense(emb_quad, emb_quad, bias=False, weight_init=weight_init),
             activation,
         )
-        self.mlp_sbf = Dense(emb_size_sbf, emb_size_edge, bias=False, weight_init=weight_init)
+        self.mlp_sbf = Dense(emb_size_sbf, emb_quad, bias=False, weight_init=weight_init)
         self.scale_sbf = ScaleFactor()
 
         self.mlp_direction = nn.Sequential(
-            Dense(emb_size_edge, emb_size_edge, False, weight_init),
+            Dense(emb_quad, emb_size_edge, False, weight_init),
             activation,
         )
 
@@ -788,6 +797,7 @@ class TripletInteraction(nn.Module):
         emb_size_edge: int,
         emb_size_rbf: int,
         emb_size_cbf: int,
+        emb_triplet: int,
         n_neighbor_basis: int,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
@@ -802,14 +812,14 @@ class TripletInteraction(nn.Module):
         self.scale_rbf = ScaleFactor()
 
         self.mlp_m_cbf = nn.Sequential(
-            Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
+            Dense(emb_size_edge, emb_triplet, bias=False, weight_init=weight_init),
             activation,
         )
-        self.mlp_cbf = Dense(emb_size_cbf, emb_size_edge, bias=False, weight_init=weight_init)
+        self.mlp_cbf = Dense(emb_size_cbf, emb_triplet, bias=False, weight_init=weight_init)
         self.scale_cbf = ScaleFactor()
 
         self.mlp_direction = nn.Sequential(
-            Dense(emb_size_edge, emb_size_edge, False, weight_init),
+            Dense(emb_triplet, emb_size_edge, False, weight_init),
             activation,
         )
 
