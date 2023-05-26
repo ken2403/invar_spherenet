@@ -746,7 +746,7 @@ class QuadrupletInteraction(nn.Module):
         # ---------- Geometric MP ----------
         m_st = self.mlp_m_rbf(m_st)  # (E, emb_size_edge)
         m_st_rbf = m_st * self.mlp_rbf(rbf)
-        m_st = self.scale_rbf(m_st_rbf, ref=m_st).unsqueeze(0)  # (E, 1, emb_size_edge)
+        m_st = self.scale_rbf(m_st_rbf, ref=m_st).unsqueeze(1)  # (E, 1, emb_size_edge)
 
         E, NB, _ = cbf.size()
         cbf = cbf.view(E * NB, -1)  # (E*NB, emb_size_cbf)
@@ -852,7 +852,7 @@ class TripletInteraction(nn.Module):
         # ---------- Geometric MP ----------
         m_st = self.mlp_m_rbf(m_st)
         m_st_rbf = m_st * self.mlp_rbf(rbf)
-        m_st = self.scale_rbf(m_st_rbf, ref=m_st).unsqueeze(0)  # (E, 1, emb_size_edge)
+        m_st = self.scale_rbf(m_st_rbf, ref=m_st).unsqueeze(1)  # (E, 1, emb_size_edge)
 
         E, NB, _ = cbf.size()
         m_st_nb = m_st.expand(E, NB, -1)  # (E, NB, emb_size_edge)
