@@ -29,18 +29,18 @@ class BaseMPNN(nn.Module):
             batch_ind = graph[GraphKeys.Pos].new_zeros(graph[GraphKeys.Pos].size(0), dtype=torch.long)
             graph[GraphKeys.Batch_idx] = batch_ind
 
-        # order is "source_to_traget" i.e. [index_j, index_i]
-        edge_j, edge_i = graph[GraphKeys.Edge_idx]
-        edge_batch = batch_ind[edge_j]
+        # order is "source_to_traget"
+        idx_s, idx_t = graph[GraphKeys.Edge_idx]
+        edge_batch = batch_ind[idx_s]
         edge_vec = (
-            graph[GraphKeys.Pos][edge_i]
-            - graph[GraphKeys.Pos][edge_j]
+            graph[GraphKeys.Pos][idx_t]
+            - graph[GraphKeys.Pos][idx_s]
             + torch.einsum("ni,nij->nj", graph[GraphKeys.Edge_shift], graph[GraphKeys.Lattice][edge_batch]).contiguous()
         )
 
-        graph[GraphKeys.Edge_dist_ji] = torch.norm(edge_vec, dim=1)
+        graph[GraphKeys.Edge_dist_st] = torch.norm(edge_vec, dim=1)
         if return_vec:
-            graph[GraphKeys.Edge_vec_ji] = edge_vec
+            graph[GraphKeys.Edge_vec_st] = edge_vec
         return graph
 
     @property
