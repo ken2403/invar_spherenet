@@ -1,3 +1,6 @@
+import inspect
+
+
 class GraphKeys:
     """Class that holds the name of the data key.
 
@@ -22,3 +25,10 @@ class GraphKeys:
 
     Theta = "theta"  # azimuthal angles of (NB, E) shape
     Phi = "phi"  # polar angles of (NB, E) shape
+
+
+KEYS = [
+    a[1]
+    for a in inspect.getmembers(GraphKeys, lambda a: not (inspect.isroutine(a)))
+    if not (a[0].startswith("__") and a[0].endswith("__"))
+]

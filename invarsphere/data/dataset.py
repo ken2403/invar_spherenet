@@ -1,34 +1,16 @@
 from __future__ import annotations
 
-import logging
-
 import ase
-import ase.neighborlist
-import numpy as np
-import torch
-from ase.data import atomic_masses
 from numpy import ndarray
 from torch import Tensor
 from torch_geometric.data import Data, Dataset
 
-from .keys import GraphKeys
+from .convert import atoms2graphdata, graphdata2atoms, set_properties
 
 
 class BaseGraphDataset(Dataset):
-    def __init__(
-        self,
-        cutoff: float,
-        max_neighbors: int = 32,
-        subtract_center_of_mass: bool = False,
-        n_neighbor_basis: int = 4,
-        basis_cutoff: float = 15,
-    ):
+    def __init__(self, cutoff: float):
         super().__init__()
-        self.cutoff = cutoff
-        self.max_neighbors = max_neighbors
-        self.subtract_center_of_mass = subtract_center_of_mass
-        self.n_neighbor_basis = n_neighbor_basis
-        self.basis_cutoff = basis_cutoff
 
     def len(self) -> int:
         raise NotImplementedError
@@ -48,182 +30,6 @@ class BaseGraphDataset(Dataset):
 
         with open(save_pth, "wb") as f:
             pickle.dump(self, f)
-
-    def _atoms2graphdata(self, atoms: ase.Atoms) -> Data:
-        """Helper function to convert one `Atoms` object to
-        `torch_geometric.data.Data` with edge index information include pbc.
-
-        Args:
-            atoms (ase.Atoms): one atoms object
-
-        Returns:
-            data (torch_geometric.data.Data): one Data object with edge information include pbc
-        """
-        if self.subtract_center_of_mass:
-            masses = np.array(atomic_masses[atoms.numbers])
-            pos = atoms.positions
-            atoms.positions -= (masses[:, None] * pos).sum(0) / masses.sum()
-
-        # edge information including pbc
-        edge_src, edge_dst, dist, edge_vec, edge_shift = ase.neighborlist.neighbor_list(
-            "ijdDS",
-            a=atoms,
-            cutoff=self.basis_cutoff if self.n_neighbor_basis else self.cutoff,
-            self_interaction=False,
-        )
-
-        # only max_neighbors
-        idx_i = np.zeros(1, dtype=int) - 100
-        idx_j = np.zeros(1, dtype=int) - 100
-        s = np.zeros((1, 3)) - 100
-        if self.n_neighbor_basis:
-            rm = np.zeros((1, self.n_neighbor_basis, 3, 3))
-
-        unique = np.unique(edge_src)
-        for i in unique:
-            center_mask = edge_src == i
-            dist_i = dist[center_mask]
-            sorted_ind = np.argsort(dist_i)
-            dist_mask = (dist_i <= self.cutoff)[sorted_ind]
-            # center_mask to retrieve information on central atom i
-            # reorder by soreted_ind in order of distance
-            # extract only the information within the cutoff radius with dist_mask
-            # indexing to take out only the max_neighbor neighborhoods
-            idx_i = np.concatenate([idx_i, edge_src[center_mask][sorted_ind][dist_mask][: self.max_neighbors]], axis=0)
-            idx_j = np.concatenate([idx_j, edge_dst[center_mask][sorted_ind][dist_mask][: self.max_neighbors]], axis=0)
-            s = np.concatenate([s, edge_shift[center_mask][sorted_ind][dist_mask][: self.max_neighbors]], axis=0)
-            # rotation matrix
-            rm_atom = np.zeros((1, 3, 3))
-            i1 = 0
-            cnt = 0
-            while cnt < self.n_neighbor_basis:
-                # nearest_vec has a coordinate component in the row direction
-                try:
-                    nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
-                except IndexError:
-                    errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {self.basis_cutoff}"  # noqa: E501
-                    logging.error(errm)
-                    raise IndexError(errm)
-                # Transpose to have a coordinate component in the column direction.
-                nearest_vec = nearest_vec.T
-                q = self._get_rot_matrix(nearest_vec)
-                while np.isnan(q).any():
-                    i1 += 1
-                    try:
-                        nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
-                    except IndexError:
-                        errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {self.basis_cutoff}"  # noqa: E501
-                        logging.error(errm)
-                        raise IndexError(errm)
-                    # Transpose to have a coordinate component in the column direction.
-                    nearest_vec = nearest_vec.T
-                    q = self._get_rot_matrix(nearest_vec)
-                cnt += 1
-                i1 += 1
-                # Transpose the original coordinates so that they can be transformed by matrix product
-                rm_atom = np.concatenate([rm_atom, q.T[np.newaxis, ...]], axis=0)
-            rm = np.concatenate([rm, rm_atom[1:][np.newaxis, ...]], axis=0)
-        edge_src = idx_i[1:]
-        edge_dst = idx_j[1:]
-        edge_shift = s[1:]
-        if self.n_neighbor_basis:
-            rotation_matrix = rm[1:]
-
-        # order is "source_to_target" i.e. [index_j, index_i]
-        data = Data(edge_index=torch.stack([torch.LongTensor(edge_dst), torch.LongTensor(edge_src)], dim=0))
-
-        data[GraphKeys.Neighbors] = torch.tensor([edge_dst.shape[0]])
-        data[GraphKeys.Pos] = torch.tensor(atoms.get_positions(), dtype=torch.float32)
-        data[GraphKeys.Z] = torch.tensor(atoms.numbers, dtype=torch.long)
-        if self.n_neighbor_basis:
-            data[GraphKeys.Rot_mat] = torch.tensor(rotation_matrix, dtype=torch.float32)
-        # add batch dimension
-        data[GraphKeys.PBC] = torch.tensor(atoms.pbc, dtype=torch.long).unsqueeze(0)
-        data[GraphKeys.Lattice] = torch.tensor(atoms.cell.array, dtype=torch.float32).unsqueeze(0)
-        data[GraphKeys.Edge_shift] = torch.tensor(edge_shift, dtype=torch.float32)
-        return data
-
-    def _get_rot_matrix(self, nearest_vec: ndarray) -> ndarray:
-        # nearest_vec is matrix with coordinate components arranged in the column direction
-        if nearest_vec.shape != (3, 2):
-            errm = f"nearest_vec must be (3, 2) shape, but got {nearest_vec.shape}"
-            logging.error(errm)
-            raise ValueError(errm)
-        nearest_vec = np.array(nearest_vec, dtype=np.float64)
-        # get first basis vector
-        nearest_vec[:, 0] /= np.linalg.norm(nearest_vec[:, 0])
-        # get second basis vector
-        nearest_vec[:, 1] -= np.dot(nearest_vec[:, 0], nearest_vec[:, 1]) * nearest_vec[:, 0]
-        nearest_vec[:, 1] /= np.linalg.norm(nearest_vec[:, 1])
-        # get third basis vector
-        cross = np.cross(nearest_vec[:, 0], nearest_vec[:, 1])
-        cross /= np.linalg.norm(cross)
-        # concatenate
-        q = np.concatenate([nearest_vec, cross[:, np.newaxis]], axis=1)
-        return q  # (3, 3) shape
-
-    def _graphdata2atoms(self, data: Data) -> ase.Atoms:
-        """Helper function to convert one `torch_geometric.data.Data` object to
-        `ase.Atoms`.
-
-        Args:
-            data (torch_geometric.data.Data): one graph data object with edge information include pbc
-        Returns:
-            atoms (ase.Atoms): one Atoms object
-        """
-        pos = data[GraphKeys.Pos].numpy()
-        atom_num = data[GraphKeys.Z].numpy()
-        ce = data[GraphKeys.Lattice].numpy()[0]  # remove batch dimension
-        pbc = data[GraphKeys.PBC].numpy()[0]  # remove batch dimension
-        atoms = ase.Atoms(numbers=atom_num, positions=pos, pbc=pbc, cell=ce)
-        return atoms
-
-    def _set_data(
-        self,
-        data: Data,
-        k: str,
-        v: int | float | ndarray | Tensor,
-        add_dim: bool,
-        add_batch: bool,
-        dtype: torch.dtype,
-    ):
-        if add_dim:
-            val = torch.tensor([v], dtype=dtype)
-        else:
-            val = torch.tensor(v, dtype=dtype)
-        data[k] = val.unsqueeze(0) if add_batch else val
-
-    def _set_properties(
-        self,
-        data: Data,
-        k: str,
-        v: int | float | str | ndarray | Tensor,
-        add_batch: bool = True,
-    ):
-        if isinstance(v, int):
-            self._set_data(data, k, v, add_dim=True, add_batch=add_batch, dtype=torch.long)
-        elif isinstance(v, float):
-            self._set_data(data, k, v, add_dim=True, add_batch=add_batch, dtype=torch.float32)
-        elif isinstance(v, str):
-            data[k] = v
-        elif len(v.shape) == 0:
-            # for 0-dim array
-            if isinstance(v, ndarray):
-                dtype = torch.long if v.dtype == int else torch.float32
-            elif isinstance(v, Tensor):
-                dtype = v.dtype
-            else:
-                raise ValueError(f"Unknown type of {v}")
-            self._set_data(data, k, v, add_dim=True, add_batch=add_batch, dtype=dtype)
-        else:
-            # for array-like
-            if isinstance(v, ndarray):
-                dtype = torch.long if v.dtype == int else torch.float32
-            elif isinstance(v, Tensor):
-                dtype = v.dtype
-            else:
-                raise ValueError(f"Unknown type of {v}")
-            self._set_data(data, k, v, add_dim=False, add_batch=add_batch, dtype=dtype)
 
 
 class List2GraphDataset(BaseGraphDataset):
@@ -257,7 +63,11 @@ class List2GraphDataset(BaseGraphDataset):
            basis_cutoff (float, optional): the cutoff radius for computing neighbor basis
            remove_batch_key (list[str] | None, optional): List of property names that do not add dimension for batch. Defaults to `None`.
         """  # noqa: E501
-        super().__init__(cutoff, max_neighbors, subtract_center_of_mass, n_neighbor_basis, basis_cutoff)
+        super().__init__(cutoff)
+        self.max_neighbors = max_neighbors
+        self.subtract_center_of_mass = subtract_center_of_mass
+        self.n_neighbor_basis = n_neighbor_basis
+        self.basis_cutoff = basis_cutoff
         self.graph_data_list: list[Data] = []
         self.remove_batch_key = remove_batch_key
         self._preprocess(structures, y_values)
@@ -268,12 +78,20 @@ class List2GraphDataset(BaseGraphDataset):
         y_values: dict[str, list[int | float | str | ndarray | Tensor] | ndarray | Tensor],
     ):
         for i, at in enumerate(atoms):
-            data = self._atoms2graphdata(at)
+            assert isinstance(at, ase.Atoms)
+            data = atoms2graphdata(
+                at,
+                self.subtract_center_of_mass,
+                self.cutoff,
+                self.max_neighbors,
+                self.n_neighbor_basis,
+                self.basis_cutoff,
+            )
             for k, v in y_values.items():
                 add_batch = True
                 if self.remove_batch_key is not None and k in self.remove_batch_key:
                     add_batch = False
-                self._set_properties(data, k, v[i], add_batch)
+                set_properties(data, k, v[i], add_batch)
             self.graph_data_list.append(data)
 
     def len(self) -> int:
@@ -285,4 +103,4 @@ class List2GraphDataset(BaseGraphDataset):
         return self.graph_data_list[idx]
 
     def get_atoms(self, idx: int) -> ase.Atoms:
-        return self._graphdata2atoms(self.graph_data_list[idx])
+        return graphdata2atoms(self.graph_data_list[idx])
