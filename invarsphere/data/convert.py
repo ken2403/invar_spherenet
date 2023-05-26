@@ -100,8 +100,10 @@ def atoms2graphdata(
                     q = _schmidt_3d(nearest_vec)
                 # Transpose the original coordinates so that they can be transformed by matrix product
                 rm_atom = np.concatenate([rm_atom, q.T[np.newaxis, ...]], axis=0)
-                basis_idx_1_atom = np.concatenate([basis_idx_1_atom, edge_dst[center_mask][sorted_ind[i1]]], axis=0)
-                basis_idx_2_atom = np.concatenate([basis_idx_2_atom, edge_dst[center_mask][sorted_ind[i1 + 1]]], axis=0)
+                basis_idx_1_atom = np.concatenate([basis_idx_1_atom, edge_dst[center_mask][sorted_ind[[i1]]]], axis=0)
+                basis_idx_2_atom = np.concatenate(
+                    [basis_idx_2_atom, edge_dst[center_mask][sorted_ind[[i1 + 1]]]], axis=0
+                )
                 cnt += 1
                 i1 += 1
 
