@@ -862,6 +862,8 @@ class TripletInteraction(nn.Module):
         m_st_cbf = m_st_nb * self.mlp_cbf(cbf)
         m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E, NB, emb_size_edge)
 
+        m_st_nb = m_st_nb.view(E, NB, -1)  # (E, NB, emb_size_edge)
+
         # ---------- Basis MP ----------
         x = m_st_nb.sum(1)  # (E, emb_size_edge)
         x = x * self.inv_sqrt_neighbor
