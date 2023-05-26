@@ -47,8 +47,8 @@ def atoms2graphdata(
     )
 
     # only max_neighbors
-    idx_i = np.zeros(1, dtype=int) - 100
-    idx_j = np.zeros(1, dtype=int) - 100
+    idx_s = np.zeros(1, dtype=int) - 100
+    idx_t = np.zeros(1, dtype=int) - 100
     s = np.zeros((1, 3)) - 100
     if n_neighbor_basis:
         rm = np.zeros((1, n_neighbor_basis, 3, 3))
@@ -63,8 +63,8 @@ def atoms2graphdata(
         # reorder by soreted_ind in order of distance
         # extract only the information within the cutoff radius with dist_mask
         # indexing to take out only the max_neighbor neighborhoods
-        idx_i = np.concatenate([idx_i, edge_src[center_mask][sorted_ind][dist_mask][:max_neighbors]], axis=0)
-        idx_j = np.concatenate([idx_j, edge_dst[center_mask][sorted_ind][dist_mask][:max_neighbors]], axis=0)
+        idx_s = np.concatenate([idx_s, edge_src[center_mask][sorted_ind][dist_mask][:max_neighbors]], axis=0)
+        idx_t = np.concatenate([idx_t, edge_dst[center_mask][sorted_ind][dist_mask][:max_neighbors]], axis=0)
         s = np.concatenate([s, edge_shift[center_mask][sorted_ind][dist_mask][:max_neighbors]], axis=0)
         # rotation matrix
         rm_atom = np.zeros((1, 3, 3))
@@ -98,8 +98,8 @@ def atoms2graphdata(
             rm_atom = np.concatenate([rm_atom, q.T[np.newaxis, ...]], axis=0)
         rm = np.concatenate([rm, rm_atom[1:][np.newaxis, ...]], axis=0)
 
-    edge_src = idx_i[1:]
-    edge_dst = idx_j[1:]
+    edge_src = idx_s[1:]
+    edge_dst = idx_t[1:]
     edge_shift = s[1:]
     if n_neighbor_basis:
         rotation_matrix = rm[1:]
