@@ -385,6 +385,8 @@ class InvarianceSphereNet(BaseMPNN):
                     F_n = -torch.autograd.grad(E_b.sum(), graph[GraphKeys.Pos], create_graph=True)[0]  # (N, 3)
 
                 graph[GraphKeys.Pos].requires_grad = False
+        else:
+            F_n = 0
 
         return E_b, F_n
 
