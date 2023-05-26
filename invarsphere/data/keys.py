@@ -17,8 +17,8 @@ class GraphKeys:
     Edge_idx = "edge_index"  # edge index with [idx_j, idx_i] of (2, E) shape
     Edge_idx_swap = "edge_swap"  # indices to map i->j to j->i of (E) shape.
     Edge_shift = "edge_shift"  # edge shift of cell of (E, 3) shape
-    Edge_dist = "edge_dist"  # edge distances ||r_ij|| of (E) shape
-    Edge_vec_ij = "edge_vec"  # edge vectors r_ij of (E, 3) shape
+    Edge_dist_ji = "edge_dist"  # edge distances ||r_ji|| of (E) shape
+    Edge_vec_ji = "edge_vec"  # edge vectors r_ji of (E, 3) shape
 
     Theta = "theta"  # azimuthal angles of (NB, E) shape
     Phi = "phi"  # polar angles of (NB, E) shape

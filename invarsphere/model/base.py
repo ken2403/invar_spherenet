@@ -20,8 +20,8 @@ class BaseMPNN(nn.Module):
 
         Returns:
             graph (torch_geometric.data.Batch): material graph batch with edge information:
-                edge_dist_ij (torch.Tensor): inter atomic distances of (E) shape.
-                edge_vec_ij (torch.Tensor): inter atomic vector from i to j atom of (E, 3) shape.
+                edge_dist (torch.Tensor): inter atomic distances of (E) shape.
+                edge_vec_ji (torch.Tensor): inter atomic vector from j to i atom of (E, 3) shape.
         """
         if graph.get(GraphKeys.Batch_idx) is not None:
             batch_ind = graph[GraphKeys.Batch_idx]
@@ -31,16 +31,16 @@ class BaseMPNN(nn.Module):
 
         # order is "source_to_traget" i.e. [index_j, index_i]
         edge_j, edge_i = graph[GraphKeys.Edge_idx]
-        edge_batch = batch_ind[edge_i]
+        edge_batch = batch_ind[edge_j]
         edge_vec = (
-            graph[GraphKeys.Pos][edge_j]
-            - graph[GraphKeys.Pos][edge_i]
+            graph[GraphKeys.Pos][edge_i]
+            - graph[GraphKeys.Pos][edge_j]
             + torch.einsum("ni,nij->nj", graph[GraphKeys.Edge_shift], graph[GraphKeys.Lattice][edge_batch]).contiguous()
         )
 
-        graph[GraphKeys.Edge_dist] = torch.norm(edge_vec, dim=1)
+        graph[GraphKeys.Edge_dist_ji] = torch.norm(edge_vec, dim=1)
         if return_vec:
-            graph[GraphKeys.Edge_vec_ij] = edge_vec
+            graph[GraphKeys.Edge_vec_ji] = edge_vec
         return graph
 
     @property

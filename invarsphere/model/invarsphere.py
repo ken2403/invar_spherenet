@@ -110,6 +110,7 @@ class InvarianceSphereNet(BaseMPNN):
                     emb_size_rbf,
                     n_residual_output,
                     n_targets,
+                    regress_forces,
                     direct_forces,
                     activation=act,
                     weight_init=wi,
@@ -209,19 +210,19 @@ class InvarianceSphereNet(BaseMPNN):
             edge_vector_new,
         )
 
-    def _rot_transform(self, rot_mat: Tensor, vec_ij: Tensor, idx_i: Tensor) -> tuple[Tensor, Tensor]:
+    def _rot_transform(self, rot_mat: Tensor, vec_ij: Tensor, idx_j: Tensor) -> tuple[Tensor, Tensor]:
         """Cartesian to polar transform of edge vector.
 
         Args:
             rot_mat (torch.Tensor): atom rotation matrix with (N, NB, 3, 3) shape.
             vec_ij (torch.Tensor): cartesian edge vector with (E, 3) shape.
-            idx_i (torch.Tensor): edge index of central atom i with (E) shape.
+            idx_j (torch.Tensor): edge index of source atom j with (E) shape.
 
         Returns:
             theta (torch.Tensor): the azimuthal angle with (NB, E) shape.
             phi (torch.Tensor): the polar angle with (NB, E) shape.
         """
-        rot_mat = rot_mat[idx_i]  # (E, NB, 3, 3)
+        rot_mat = rot_mat[idx_j]  # (E, NB, 3, 3)
 
         # ---------- rotation transform ----------
         rot_vec = torch.einsum("ebnm,em->ebn", rot_mat, vec_ij)  # (E, NB, 3)
@@ -241,20 +242,20 @@ class InvarianceSphereNet(BaseMPNN):
         edge_index: Tensor = graph[GraphKeys.Edge_idx]
         cell_offsets: Tensor = graph[GraphKeys.Edge_shift]
         neighbors: Tensor = graph[GraphKeys.Neighbors]
-        d_ij: Tensor = graph[GraphKeys.Edge_dist]
-        v_ij: Tensor = graph[GraphKeys.Edge_vec_ij]
+        d_ji: Tensor = graph[GraphKeys.Edge_dist_ji]
+        v_ji: Tensor = graph[GraphKeys.Edge_vec_ji]
         (
             edge_index,
             cell_offsets,
             neighbors,
-            d_ij,
-            v_ij,
-        ) = self._reorder_symmetric_edges(edge_index, cell_offsets, neighbors, d_ij, v_ij)
+            d_ji,
+            v_ji,
+        ) = self._reorder_symmetric_edges(edge_index, cell_offsets, neighbors, d_ji, v_ji)
         graph[GraphKeys.Edge_idx] = edge_index
         graph[GraphKeys.Edge_shift] = cell_offsets
         graph[GraphKeys.Neighbors] = neighbors
-        graph[GraphKeys.Edge_dist] = d_ij
-        graph[GraphKeys.Edge_vec_ij] = v_ij
+        graph[GraphKeys.Edge_dist_ji] = d_ji
+        graph[GraphKeys.Edge_vec_ji] = v_ji
 
         # Indices for swapping c->a and a->c (for symmetric MP)
         block_sizes = neighbors // 2
@@ -270,8 +271,8 @@ class InvarianceSphereNet(BaseMPNN):
 
         theta, phi = self._rot_transform(
             graph[GraphKeys.Rot_mat],
-            v_ij,
-            edge_index[1],  # order is "source_to_target" i.e. [index_j, index_i]
+            v_ji,
+            edge_index[0],  # order is "source_to_target" i.e. [index_j, index_i]
         )
         graph[GraphKeys.Theta] = theta
         graph[GraphKeys.Phi] = phi
@@ -285,7 +286,7 @@ class InvarianceSphereNet(BaseMPNN):
         graph = self.generate_interaction_graph(graph)
 
         z: Tensor = graph[GraphKeys.Z]
-        d_ij: Tensor = graph[GraphKeys.Edge_dist]
+        d_ji: Tensor = graph[GraphKeys.Edge_dist_ji]
         if graph.get(GraphKeys.Batch_idx) is None:
             graph[GraphKeys.Batch_idx] = z.new_zeros(z.size(0), dtype=torch.long)
         batch_idx: Tensor = graph[GraphKeys.Batch_idx]
@@ -297,7 +298,7 @@ class InvarianceSphereNet(BaseMPNN):
 
         # ---------- Basis layers ----------
         # --- rbf ---
-        rbf = self.rbf(d_ij)  # (E, max_n)
+        rbf = self.rbf(d_ji)  # (E, max_n)
         rbf3 = self.mlp_rbf3(rbf)  # (E, emb_size_rbf)
         rbf4 = self.mlp_rbf4(rbf)  # (E, emb_size_rbf)
         rbf_h = self.mlp_rbf_h(rbf)  # (E, emb_size_rbf)
@@ -309,14 +310,14 @@ class InvarianceSphereNet(BaseMPNN):
 
         # expand with NB dimension
         NB, E = phi.size()
-        d_ij = d_ij.unsqueeze(0).expand(NB, E)  # (NB, E)
+        d_ji = d_ji.unsqueeze(0).expand(NB, E)  # (NB, E)
         # reshape to calculate basis
-        d_ij, theta, phi = d_ij.flatten(), theta.flatten(), phi.flatten()
+        d_ij, theta, phi = d_ji.flatten(), theta.flatten(), phi.flatten()
         # cbf
         # phi is the angle with the first proximity edge
         cbf3 = self.cbf(d_ij, phi).view(NB, E, -1)  # (NB, E, max_n*max_l)
         cbf3 = self.mlp_cbf3(cbf3)  # (NB, E, emb_size_cbf)
-        # theta is the angle between m_ij and the plane made by the first and second proximity
+        # theta is the angle between m_ji and the plane made by the first and second proximity
         cbf4 = self.cbf(d_ij, theta).view(NB, E, -1)  # (NB, E, max_n*max_l)
         cbf4 = self.mlp_cbf4(cbf4)  # (NB, E, emb_size_cbf)
         # sbf
@@ -325,16 +326,16 @@ class InvarianceSphereNet(BaseMPNN):
 
         # ---------- EmbeddingBlock and OutputBlock----------
         # (N, emb_size) & (E, emb_size)
-        h, m_ij = self.emb_block(z, rbf, idx_i, idx_j)
+        h, m_ji = self.emb_block(z, rbf, idx_i, idx_j)
         # (B, n_targets) & (E, n_targets)
-        E_i, F_ij = self.out_blocks[0](h, m_ij, rbf_out, idx_i)
+        E_i, F_ji = self.out_blocks[0](h, m_ji, rbf_out, idx_i)
 
         # ---------- InteractionBlock and OutputBlock ----------
         for i in range(self.n_blocks):
             # interacton
-            h, m_ij = self.int_blocks[i](
+            h, m_ji = self.int_blocks[i](
                 h,
-                m_ij,
+                m_ji,
                 rbf_h,
                 rbf3,
                 rbf4,
@@ -347,9 +348,9 @@ class InvarianceSphereNet(BaseMPNN):
             )
 
             # output
-            E, F = self.out_blocks[i](h, m_ij, rbf_out, idx_i)
+            E, F = self.out_blocks[i](h, m_ji, rbf_out, idx_i)
             E_i += E
-            F_ij += F
+            F_ji += F
 
         # ---------- Output calculation ----------
         B = torch.max(batch_idx) + 1
@@ -362,14 +363,14 @@ class InvarianceSphereNet(BaseMPNN):
         if self.regress_forces:
             if self.direct_forces:
                 # map forces in edge directions
-                dir_ij = graph[GraphKeys.Edge_vec_ij] / graph[GraphKeys.Edge_vec_ij].norm(dim=-1, keepdim=True)
-                F_ij = F_ij[:, :, None] * dir_ij[:, None, :]  # (E, n_targets, 3)
-                F_ij = scatter(F_ij, idx_i, dim=0, dim_size=z.size(0), reduce="add")  # (N, n_targets, 3)
-                F_ij = F_ij.squeeze(1)  # (N, 3)
+                dir_ji = graph[GraphKeys.Edge_vec_ji] / graph[GraphKeys.Edge_vec_ji].norm(dim=-1, keepdim=True)
+                F_ji = F_ji[:, :, None] * dir_ji[:, None, :]  # (E, n_targets, 3)
+                F_ji = scatter(F_ji, idx_i, dim=0, dim_size=z.size(0), reduce="add")  # (N, n_targets, 3)
+                F_ji = F_ji.squeeze(1)  # (N, 3)
             else:
                 if self.n_targets > 1:
                     # maybe this can be solved differently
-                    F_ij = torch.stack(
+                    F_ji = torch.stack(
                         [
                             -torch.autograd.grad(E_i[:, i].sum(), graph[GraphKeys.Pos], create_graph=True)[0]
                             for i in range(self.n_targets)
@@ -377,11 +378,11 @@ class InvarianceSphereNet(BaseMPNN):
                         dim=1,
                     )  # (N, n_targets, 3)
                 else:
-                    F_ij = -torch.autograd.grad(E_i.sum(), graph[GraphKeys.Pos], create_graph=True)[0]  # (N, 3)
+                    F_ji = -torch.autograd.grad(E_i.sum(), graph[GraphKeys.Pos], create_graph=True)[0]  # (N, 3)
 
                 graph[GraphKeys.Pos].requires_grad = False
 
-        return E_i, F_ij
+        return E_i, F_ji
 
 
 class EmbeddingBlock(nn.Module):
@@ -432,15 +433,15 @@ class EmbeddingBlock(nn.Module):
 
         Returns:
             h (torch.Tensor): Atom embedding with (N, atom_features) shape.
-            m_ij (torch.Tensor): Edge embedding with (E, edge_features) shape.
+            m_ji (torch.Tensor): Edge embedding with (E, edge_features) shape.
         """
         h = self.atom_embedding(z - 1)
         h_i = h[idx_i]  # (E, atom_features)
         h_j = h[idx_j]  # (E, atom_features)
 
-        m_ij = torch.cat([h_i, h_j, rbf], dim=-1)  # (E, 2*atom_features+edge_features)
-        m_ij = self.mlp_embed(m_ij)  # (E, out_features)
-        return h, m_ij
+        m_ji = torch.cat([h_i, h_j, rbf], dim=-1)  # (E, 2*atom_features+edge_features)
+        m_ji = self.mlp_embed(m_ji)  # (E, out_features)
+        return h, m_ji
 
 
 class InteractionBlock(nn.Module):
@@ -513,7 +514,7 @@ class InteractionBlock(nn.Module):
     def forward(
         self,
         h: Tensor,
-        m_ij: Tensor,
+        m_ji: Tensor,
         rbf_h: Tensor,
         rbf3: Tensor,
         rbf4: Tensor,
@@ -526,10 +527,10 @@ class InteractionBlock(nn.Module):
     ) -> tuple[Tensor, Tensor]:
         # ---------- Geometric MP ----------
         # Initial transformation
-        x_ij_skip = self.mlp_ij(m_ij)  # (E, emb_size_edge)
+        x_ij_skip = self.mlp_ij(m_ji)  # (E, emb_size_edge)
 
-        x4 = self.q_mp(m_ij, rbf4, cbf4, sbf4, idx_swap)
-        x3 = self.t_mp(m_ij, rbf3, cbf3, idx_swap)
+        x4 = self.q_mp(m_ji, rbf4, cbf4, sbf4, idx_swap)
+        x3 = self.t_mp(m_ji, rbf3, cbf3, idx_swap)
 
         # ---------- Merge Embeddings after Quadruplet and Triplet Interaction ----------
         x = x_ij_skip + x3 + x4  # (E, emb_size_edge)
@@ -540,30 +541,30 @@ class InteractionBlock(nn.Module):
             x = layer(x)  # (E, emb_size_edge)
 
         # Skip connection
-        m_ij = m_ij + x  # (E, emb_size_edge)
-        m_ij = m_ij * self.inv_sqrt_2
+        m_ji = m_ji + x  # (E, emb_size_edge)
+        m_ji = m_ji * self.inv_sqrt_2
 
         for layer in self.residual_after_skip:
-            m_ij = layer(m_ij)  # (E, emb_size_edge)
+            m_ji = layer(m_ji)  # (E, emb_size_edge)
 
         # ---------- Update Atom Embeddings ----------
-        h2 = self.atom_emb(h, m_ij, rbf_h, idx_i)  # (N, emb_size_atom)
+        h2 = self.atom_emb(h, m_ji, rbf_h, idx_i)  # (N, emb_size_atom)
 
         # Skip connection
         h = h + h2  # (N, emb_size_atom)
         h = h * self.inv_sqrt_2
 
         # ---------- Update Edge Embeddings with Atom Embeddings ----------
-        m2 = self.atom_self_interaction(h, m_ij, idx_i, idx_j)  # (E, emb_size_edge)
+        m2 = self.atom_self_interaction(h, m_ji, idx_i, idx_j)  # (E, emb_size_edge)
 
         for layer in self.residual_m:
             m2 = layer(m2)  # (E, emb_size_edge)
 
         # Skip connection
-        m_ij = m_ij + m2  # (E, emb_size_edge)
-        m_ij = m_ij * self.inv_sqrt_2
+        m_ji = m_ji + m2  # (E, emb_size_edge)
+        m_ji = m_ji * self.inv_sqrt_2
 
-        return h, m_ij
+        return h, m_ji
 
 
 class OutputBlock(nn.Module):
@@ -574,6 +575,7 @@ class OutputBlock(nn.Module):
         emb_size_rbf: int,
         n_residual: int,
         n_targets: int,
+        regress_forces: bool,
         direct_forces: bool,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
@@ -584,8 +586,9 @@ class OutputBlock(nn.Module):
         self.emb_size_rbf = emb_size_rbf
         self.n_residual = n_residual
         self.n_targets = n_targets
-
+        self.regress_forces = regress_forces
         self.direct_forces = direct_forces
+
         self.dense_rbf = Dense(emb_size_rbf, emb_size_edge, bias=False, weight_init=weight_init)
 
         self.mlp_energy = self.get_mlp(emb_size_atom, n_residual, activation, weight_init)
@@ -594,7 +597,7 @@ class OutputBlock(nn.Module):
         # without any edge embeddings is zero
         self.mlp_out_energy = Dense(emb_size_atom, n_targets, bias=False, weight_init=weight_init)
 
-        if self.direct_forces:
+        if self.regress_forces and self.direct_forces:
             self.scale_rbf = ScaleFactor()
             self.mlp_forces = self.get_mlp(emb_size_edge, n_residual, activation, weight_init)
             # no bias in final layer to ensure continuity
@@ -614,11 +617,11 @@ class OutputBlock(nn.Module):
             mlp.append(ResidualLayer(units, 2, False, activation=activation, weight_init=weight_init))
         return nn.ModuleList(mlp)
 
-    def forward(self, h: Tensor, m_ij: Tensor, rbf: Tensor, idx_i: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, h: Tensor, m_ji: Tensor, rbf: Tensor, idx_i: Tensor) -> tuple[Tensor, Tensor]:
         """
         Args:
             h (torch.Tensor): Atom embedding with (N, emb_size_atom) shape.
-            m_ij (torch.Tensor): edge embedding of ji with (E, emb_size_edge) shape.
+            m_ji (torch.Tensor): edge embedding with (E, emb_size_edge) shape.
             rbf (torch.Tensor): RBF of ji with (E, emb_size_rbf) shape.
             idx_i (torch.Tensor): Edge index of target atom i with (E) shape.
 
@@ -629,11 +632,11 @@ class OutputBlock(nn.Module):
         N = h.size(0)
 
         rbf_mlp = self.dense_rbf(rbf)  # (E, emb_size_edge)
-        x = m_ij * rbf_mlp
+        x = m_ji * rbf_mlp
 
         # ---------- Energy Prediction ----------
         x_E = scatter(x, idx_i, dim=0, dim_size=N, reduce="add")  # (N, emb_size_edge)
-        x_E = self.scale_sum(x_E, ref=m_ij)
+        x_E = self.scale_sum(x_E, ref=m_ji)
 
         for layer in self.mlp_energy:
             x_E = layer(x_E)  # (N, emb_size_atom)
@@ -641,8 +644,8 @@ class OutputBlock(nn.Module):
         x_E = self.mlp_out_energy(x_E)  # (N, num_targets)
 
         # ---------- Force Prediction ----------
-        if self.direct_forces:
-            x_F = self.scale_rbf(x, ref=m_ij)
+        if self.regress_forces and self.direct_forces:
+            x_F = self.scale_rbf(x, ref=m_ji)
 
             for layer in self.mlp_forces:
                 x_F = layer(x_F)  # (E, emb_size_edge)
@@ -708,7 +711,7 @@ class QuadrupletInteraction(nn.Module):
 
     def forward(
         self,
-        m_ij: Tensor,
+        m_ji: Tensor,
         rbf: Tensor,
         cbf: Tensor,
         sbf: Tensor,
@@ -716,7 +719,7 @@ class QuadrupletInteraction(nn.Module):
     ) -> Tensor:
         """
         Args:
-            m_ij (Tensor): Edge embedding with (E, emb_size_edge) shape.
+            m_ji (Tensor): Edge embedding with (E, emb_size_edge) shape.
             rbf (Tensor): RBF with (E, emb_size_rbf) shape.
             cbf (Tensor): CBF with (NB, E, emb_size_cbf) shape.
             sbf (Tensor): SBF with (NB, E, emb_size_sbf) shape.
@@ -726,26 +729,25 @@ class QuadrupletInteraction(nn.Module):
             x4 (Tensor): Qudruplet interaction embedding with (E, emb_size_edge) shape.
         """
         # ---------- Geometric MP ----------
-        m_ij = m_ij.unsqueeze(0)  # (1, E, emb_size_edge)
+        m_ji = m_ji.unsqueeze(0)  # (1, E, emb_size_edge)
         rbf = rbf.unsqueeze(0)  # (1, E, emb_size_rbf)
 
-        m_ij = self.mlp_m_rbf(m_ij)
-        m_ij2 = m_ij * self.mlp_rbf(rbf)
-        m_ij = self.scale_rbf(m_ij2, ref=m_ij)  # (1, E, emb_size_edge)
+        m_ji = self.mlp_m_rbf(m_ji)
+        m_ji2 = m_ji * self.mlp_rbf(rbf)
+        m_ji = self.scale_rbf(m_ji2, ref=m_ji)  # (1, E, emb_size_edge)
 
         NB, E, _ = cbf.size()
-        m_ij = m_ij.expand(NB, E, -1)  # (NB, E, emb_size_edge)
-        m_ij = self.mlp_m_cbf(m_ij)
-        m_ij2 = m_ij * self.mlp_cbf(cbf)
-        m_ij = self.scale_cbf(m_ij2, ref=m_ij)  # (NB, E, emb_size_edge)
+        m_ji = m_ji.expand(NB, E, -1)  # (NB, E, emb_size_edge)
+        m_ji = self.mlp_m_cbf(m_ji)
+        m_ji2 = m_ji * self.mlp_cbf(cbf)
+        m_ji = self.scale_cbf(m_ji2, ref=m_ji)  # (NB, E, emb_size_edge)
 
-        m_ij = self.mlp_m_sbf(m_ij)
-        m_ij2 = m_ij * self.mlp_sbf(sbf)
-        m_ij = self.scale_sbf(m_ij2, ref=m_ij)  # (NB, E, emb_size_edge)
+        m_ji = self.mlp_m_sbf(m_ji)
+        m_ji2 = m_ji * self.mlp_sbf(sbf)
+        m_ji = self.scale_sbf(m_ji2, ref=m_ji)  # (NB, E, emb_size_edge)
 
         # ---------- Basis MP ----------
-        # x = torch.stack([m_ij[i] for i in range(self.n_neighbor_basis)], dim=-1)
-        x = m_ij.sum(0)  # (E, emb_size_edge)
+        x = m_ji.sum(0)  # (E, emb_size_edge)
         x = x * self.inv_sqrt_neighbor
         x = self.mlp_direction(x)
 
@@ -754,7 +756,7 @@ class QuadrupletInteraction(nn.Module):
         x_ji = self.mlp_ji(x)  # (E, emb_size_edge)
 
         # Merge interaction of i->j and j->i
-        x_ji = x_ji[idx_swap]  # swap to add to edge j->i and not i->j
+        x_ij = x_ij[idx_swap]  # swap to add to edge j->i and not i->j
         x4 = x_ji + x_ij
         x4 = x4 * self.inv_sqrt_2
 
@@ -806,14 +808,14 @@ class TripletInteraction(nn.Module):
 
     def forward(
         self,
-        m_ij: Tensor,
+        m_ji: Tensor,
         rbf: Tensor,
         cbf: Tensor,
         idx_swap: Tensor,
     ) -> Tensor:
         """
         Args:
-            m_ij (Tensor): Edge embedding with (E, emb_size_edge) shape.
+            m_ji (Tensor): Edge embedding with (E, emb_size_edge) shape.
             rbf (Tensor): RBF with (E, emb_size_rbf) shape.
             cbf (Tensor): CBF with (NB, E, emb_size_cbf) shape.
             idx_swap (Tensor): swap index of edge with (E) shape.
@@ -822,22 +824,21 @@ class TripletInteraction(nn.Module):
             x3 (Tensor): Triplet interaction embedding with (E, emb_size_edge) shape.
         """
         # ---------- Geometric MP ----------
-        m_ij = m_ij.unsqueeze(0)  # (1, E, emb_size_edge)
+        m_ji = m_ji.unsqueeze(0)  # (1, E, emb_size_edge)
         rbf = rbf.unsqueeze(0)  # (1, E, emb_rbf)
 
-        m_ij = self.mlp_m_rbf(m_ij)
-        m_ij2 = m_ij * self.mlp_rbf(rbf)
-        m_ij = self.scale_rbf(m_ij2, ref=m_ij)  # (1, E, emb_size_edge)
+        m_ji = self.mlp_m_rbf(m_ji)
+        m_ji2 = m_ji * self.mlp_rbf(rbf)
+        m_ji = self.scale_rbf(m_ji2, ref=m_ji)  # (1, E, emb_size_edge)
 
         NB, E, _ = cbf.size()
-        m_ij = m_ij.expand(NB, E, -1)  # (NB, E, emb_size_edge)
-        m_ij = self.mlp_m_cbf(m_ij)
-        m_ij2 = m_ij * self.mlp_cbf(cbf)
-        m_ij = self.scale_cbf(m_ij2, ref=m_ij)  # (NB, E, emb_size_edge)
+        m_ji = m_ji.expand(NB, E, -1)  # (NB, E, emb_size_edge)
+        m_ji = self.mlp_m_cbf(m_ji)
+        m_ji2 = m_ji * self.mlp_cbf(cbf)
+        m_ji = self.scale_cbf(m_ji2, ref=m_ji)  # (NB, E, emb_size_edge)
 
         # ---------- Basis MP ----------
-        # x = torch.stack([m_ij[i] for i in range(self.n_neighbor_basis)], dim=-1)
-        x = m_ij.sum(0)  # (E, emb_size_edge)
+        x = m_ji.sum(0)  # (E, emb_size_edge)
         x = x * self.inv_sqrt_neighbor
         x = self.mlp_direction(x)
 
@@ -846,7 +847,7 @@ class TripletInteraction(nn.Module):
         x_ji = self.mlp_ji(x)  # (E, emb_size_edge)
 
         # Merge interaction of i->j and j->i
-        x_ji = x_ji[idx_swap]  # swap to add to edge j->i and not i->j
+        x_ij = x_ij[idx_swap]  # swap to add to edge i->j and not j->i
         x3 = x_ji + x_ij
         x3 = x3 * self.inv_sqrt_2
 
@@ -888,11 +889,11 @@ class AtomEmbedding(nn.Module):
             mlp.append(ResidualLayer(units, 2, False, activation=activation, weight_init=weight_init))
         return nn.ModuleList(mlp)
 
-    def forward(self, h: Tensor, m_ij: Tensor, rbf: Tensor, idx_i: Tensor) -> Tensor:
+    def forward(self, h: Tensor, m_ji: Tensor, rbf: Tensor, idx_i: Tensor) -> Tensor:
         """
         Args:
             h (torch.Tensor): Atom embedding with (N, emb_size_atom) shape.
-            m_ij (torch.Tensor): edge embedding of ji with (E, emb_size_edge) shape.
+            m_ji (torch.Tensor): edge embedding with (E, emb_size_edge) shape.
             rbf (torch.Tensor): RBF of ji with (E, emb_size_rbf) shape.
             idx_i (torch.Tensor): Edge index of target atom i with (E) shape.
 
@@ -902,10 +903,10 @@ class AtomEmbedding(nn.Module):
         N = h.size(0)
 
         mlp_rbf = self.mlp_rbf(rbf)  # (E, emb_size_edge)
-        x = m_ij * mlp_rbf
+        x = m_ji * mlp_rbf
 
         x2 = scatter(x, idx_i, dim=0, dim_size=N, reduce="add")
-        x = self.scale_sum(x2, ref=m_ij)  # (N, emb_size_edge)
+        x = self.scale_sum(x2, ref=m_ji)  # (N, emb_size_edge)
 
         for layer in self.mlp:
             x = layer(x)  # (N, emb_size_atom)
@@ -927,20 +928,20 @@ class AtomSelfInteracion(nn.Module):
             activation,
         )
 
-    def forward(self, h: Tensor, m_ij: Tensor, idx_i: Tensor, idx_j: Tensor) -> Tensor:
+    def forward(self, h: Tensor, m_ji: Tensor, idx_i: Tensor, idx_j: Tensor) -> Tensor:
         """
         Args:
             h (torch.Tensor): Atom embedding with (N, emb_size_atom) shape.
-            m_ij (torch.Tensor): edge embedding of ji with (E, emb_size_edge) shape.
+            m_ji (torch.Tensor): edge embedding with (E, emb_size_edge) shape.
             idx_i (torch.Tensor): Edge index of target atom i with (E) shape.
             idx_j (torch.Tensor): Edge index of source atom j with (E) shape.
 
         Returns:
-            m_ij (torch.Tensor): Updated edge embedding with (E, emb_size_edge) shape.
+            m_ji (torch.Tensor): Updated edge embedding with (E, emb_size_edge) shape.
         """
         h_i = h[idx_i]
         h_j = h[idx_j]
 
-        m_ij = torch.cat([h_i, h_j, m_ij], dim=-1)  # (E, 2*emb_size_atom+emb_size_edge)
-        m_ij = self.mlp_embed(m_ij)  # (E, emb_size_edge)
-        return m_ij
+        m_ji = torch.cat([h_i, h_j, m_ji], dim=-1)  # (E, 2*emb_size_atom+emb_size_edge)
+        m_ji = self.mlp_embed(m_ji)  # (E, emb_size_edge)
+        return m_ji
