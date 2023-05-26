@@ -750,7 +750,7 @@ class QuadrupletInteraction(nn.Module):
 
         E, NB, _ = cbf.size()
         cbf = cbf.view(E * NB, -1)  # (E*NB, emb_size_cbf)
-        m_st_nb = m_st.expand(E, NB, -1).view(E * NB, -1)  # (E*NB emb_size_edge)
+        m_st_nb = m_st.expand(E, NB, -1).contiguous().view(E * NB, -1)  # (E*NB emb_size_edge)
         m_st_nb = self.mlp_m_cbf(m_st_nb)
         m_st_nb = m_st_nb[basis_idx1] + m_st_nb[basis_idx2]
         m_st_nb = m_st_nb * self.inv_sqrt_2
@@ -855,7 +855,7 @@ class TripletInteraction(nn.Module):
         m_st = self.scale_rbf(m_st_rbf, ref=m_st).unsqueeze(1)  # (E, 1, emb_size_edge)
 
         E, NB, _ = cbf.size()
-        m_st_nb = m_st.expand(E, NB, -1)  # (E, NB, emb_size_edge)
+        m_st_nb = m_st.expand(E, NB, -1).contiguous().view(E * NB, -1)  # (E, NB, emb_size_edge)
         m_st_nb = self.mlp_m_cbf(m_st_nb)
         m_st_nb = m_st_nb[basis_idx1]
         m_st_cbf = m_st_nb * self.mlp_cbf(cbf)
