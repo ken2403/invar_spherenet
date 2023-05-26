@@ -52,6 +52,8 @@ def atoms2graphdata(
     s = np.zeros((1, 3)) - 100
     if n_neighbor_basis:
         rm = np.zeros((1, n_neighbor_basis, 3, 3))
+        basis_idx_1 = np.zeros((1, n_neighbor_basis), dtype=int) - 100
+        basis_idx_2 = np.zeros((1, n_neighbor_basis), dtype=int) - 100
 
     unique = np.unique(edge_src)
     for i in unique:
@@ -66,23 +68,16 @@ def atoms2graphdata(
         idx_s = np.concatenate([idx_s, edge_src[center_mask][sorted_ind][dist_mask][:max_neighbors]], axis=0)
         idx_t = np.concatenate([idx_t, edge_dst[center_mask][sorted_ind][dist_mask][:max_neighbors]], axis=0)
         s = np.concatenate([s, edge_shift[center_mask][sorted_ind][dist_mask][:max_neighbors]], axis=0)
+
         # rotation matrix
-        rm_atom = np.zeros((1, 3, 3))
-        i1 = 0
-        cnt = 0
-        while cnt < n_neighbor_basis:
-            # nearest_vec has a coordinate component in the row direction
-            try:
-                nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
-            except IndexError:
-                errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {basis_cutoff}"  # noqa: E501
-                logging.error(errm)
-                raise IndexError(errm)
-            # Transpose to have a coordinate component in the column direction.
-            nearest_vec = nearest_vec.T
-            q = _schmidt_3d(nearest_vec)
-            while np.isnan(q).any():
-                i1 += 1
+        if n_neighbor_basis:
+            rm_atom = np.zeros((1, 3, 3))
+            basis_idx_1_atom = np.zeros(1, dtype=int)
+            basis_idx_2_atom = np.zeros(1, dtype=int)
+            i1 = 0
+            cnt = 0
+            while cnt < n_neighbor_basis:
+                # nearest_vec has a coordinate component in the row direction
                 try:
                     nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
                 except IndexError:
@@ -92,11 +87,27 @@ def atoms2graphdata(
                 # Transpose to have a coordinate component in the column direction.
                 nearest_vec = nearest_vec.T
                 q = _schmidt_3d(nearest_vec)
-            cnt += 1
-            i1 += 1
-            # Transpose the original coordinates so that they can be transformed by matrix product
-            rm_atom = np.concatenate([rm_atom, q.T[np.newaxis, ...]], axis=0)
-        rm = np.concatenate([rm, rm_atom[1:][np.newaxis, ...]], axis=0)
+                while np.isnan(q).any():
+                    i1 += 1
+                    try:
+                        nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
+                    except IndexError:
+                        errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {basis_cutoff}"  # noqa: E501
+                        logging.error(errm)
+                        raise IndexError(errm)
+                    # Transpose to have a coordinate component in the column direction.
+                    nearest_vec = nearest_vec.T
+                    q = _schmidt_3d(nearest_vec)
+                # Transpose the original coordinates so that they can be transformed by matrix product
+                rm_atom = np.concatenate([rm_atom, q.T[np.newaxis, ...]], axis=0)
+                basis_idx_1_atom = np.concatenate([basis_idx_1_atom, edge_dst[center_mask][sorted_ind[i1]]], axis=0)
+                basis_idx_2_atom = np.concatenate([basis_idx_2_atom, edge_dst[center_mask][sorted_ind[i1 + 1]]], axis=0)
+                cnt += 1
+                i1 += 1
+
+            rm = np.concatenate([rm, rm_atom[1:][np.newaxis, ...]], axis=0)
+            basis_idx_1 = np.concatenate([basis_idx_1, basis_idx_1_atom[1:][np.newaxis, ...]], axis=0)
+            basis_idx_2 = np.concatenate([basis_idx_2, basis_idx_2_atom[1:][np.newaxis, ...]], axis=0)
 
     edge_src = idx_s[1:]
     edge_dst = idx_t[1:]
@@ -112,6 +123,8 @@ def atoms2graphdata(
     data[GraphKeys.Z] = torch.tensor(atoms.numbers, dtype=torch.long)
     if n_neighbor_basis:
         data[GraphKeys.Rot_mat] = torch.tensor(rotation_matrix, dtype=torch.float32)
+        data[GraphKeys.Basis_edge_idx1] = torch.tensor(basis_idx_1, dtype=torch.long)
+        data[GraphKeys.Basis_edge_idx2] = torch.tensor(basis_idx_2, dtype=torch.long)
     # add batch dimension
     data[GraphKeys.PBC] = torch.tensor(atoms.pbc, dtype=torch.long).unsqueeze(0)
     data[GraphKeys.Lattice] = torch.tensor(atoms.cell.array, dtype=torch.float32).unsqueeze(0)

@@ -15,16 +15,18 @@ class GraphKeys:
     Z = "z"  # atomic number of (N) shape
     Pos = "pos"  # atomic position of (N, 3) shape
     Rot_mat = "rotation_matrix"  # atomic rotation matrix of (N, NB, 3, 3) shape
+    Basis_edge_idx1 = "basis_idx1"  # Index of the first proximity out of the neighbor basis of (N, NB) shape
+    Basis_edge_idx2 = "basis_idx2"  # Index of the second proximity out of the neighbor basis of (N, NB) shape
 
     # Attributes marked with "index" are automatically incremented in batch processing
-    Edge_idx = "edge_index"  # edge index with [idx_j, idx_i] of (2, E) shape
-    Edge_idx_swap = "edge_swap"  # indices to map i->j to j->i of (E) shape.
+    Edge_idx = "edge_index"  # edge index with [idx_s, idx_t] of (2, E) shape
+    Edge_idx_swap = "edge_swap"  # indices to map s->t to t->s of (E) shape.
     Edge_shift = "edge_shift"  # edge shift of cell of (E, 3) shape
     Edge_dist_st = "edge_dist"  # edge distances ||r_st|| of (E) shape
     Edge_vec_st = "edge_vec"  # edge vectors r_st of (E, 3) shape
 
-    Theta = "theta"  # azimuthal angles of (NB, E) shape
-    Phi = "phi"  # polar angles of (NB, E) shape
+    Theta = "theta"  # azimuthal angles of (E, NB) shape
+    Phi = "phi"  # polar angles of (E, NB) shape
 
 
 KEYS = [
