@@ -6,6 +6,7 @@ import ase
 import numpy as np
 import torch
 from ase.data import atomic_masses
+from ase.neighborlist import neighbor_list
 from numpy import ndarray
 from torch import Tensor
 from torch_geometric.data import Data
@@ -38,7 +39,7 @@ def atoms2graphdata(
         atoms.positions -= (masses[:, None] * pos).sum(0) / masses.sum()
 
     # edge information including pbc
-    edge_src, edge_dst, dist, edge_vec, edge_shift = ase.neighborlist.neighbor_list(
+    edge_src, edge_dst, dist, edge_vec, edge_shift = neighbor_list(
         "ijdDS",
         a=atoms,
         cutoff=basis_cutoff if n_neighbor_basis else cutoff,
