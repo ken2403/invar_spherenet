@@ -149,9 +149,16 @@ class BaseGraphDataset(Dataset):
             errm = f"nearest_vec must be (3, 2) shape, but got {nearest_vec.shape}"
             logging.error(errm)
             raise ValueError(errm)
-        nearest_vec = np.array(nearest_vec, dtype=np.float64)
+        nearest_vec = np.array(nearest_vec, dtype=np.float128)
+        # get first basis vector
+        nearest_vec[:, 0] /= np.linalg.norm(nearest_vec[:, 0])
+        # get second basis vector
+        nearest_vec[:, 1] -= np.dot(nearest_vec[:, 0], nearest_vec[:, 1]) * nearest_vec[:, 0]
+        nearest_vec[:, 1] /= np.linalg.norm(nearest_vec[:, 1])
+        # get third basis vector
         cross = np.cross(nearest_vec[:, 0], nearest_vec[:, 1])
         cross /= np.linalg.norm(cross)
+        # concatenate
         q = np.concatenate([nearest_vec, cross[:, np.newaxis]], axis=1)
         q, _ = np.linalg.qr(q)
         return q  # (3, 3) shape
