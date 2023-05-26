@@ -295,6 +295,8 @@ class InvarianceSphereNet(BaseMPNN):
         idx_s = idx[0]
         idx_t = idx[1]
         idx_swap: Tensor = graph[GraphKeys.Edge_idx_swap]
+        basis_idx1: Tensor = graph[GraphKeys.Basis_edge_idx1]
+        basis_idx2: Tensor = graph[GraphKeys.Basis_edge_idx2]
 
         # ---------- Basis layers ----------
         # --- rbf ---
@@ -345,6 +347,8 @@ class InvarianceSphereNet(BaseMPNN):
                 idx_s,
                 idx_t,
                 idx_swap,
+                basis_idx1,
+                basis_idx2,
             )
 
             # output
@@ -524,13 +528,15 @@ class InteractionBlock(nn.Module):
         idx_s: Tensor,
         idx_t: Tensor,
         idx_swap: Tensor,
+        basis_idx1: Tensor,
+        basis_idx2: Tensor,
     ) -> tuple[Tensor, Tensor]:
         # ---------- Geometric MP ----------
         # Initial transformation
         x_st_skip = self.mlp_st(m_st)  # (E, emb_size_edge)
 
-        x4 = self.q_mp(m_st, rbf4, cbf4, sbf4, idx_swap)
-        x3 = self.t_mp(m_st, rbf3, cbf3, idx_swap)
+        x4 = self.q_mp(m_st, rbf4, cbf4, sbf4, idx_s, idx_swap, basis_idx1, basis_idx2)
+        x3 = self.t_mp(m_st, rbf3, cbf3, idx_s, idx_swap, basis_idx1)
 
         # ---------- Merge Embeddings after Quadruplet and Triplet Interaction ----------
         x = x_st_skip + x3 + x4  # (E, emb_size_edge)
@@ -715,7 +721,10 @@ class QuadrupletInteraction(nn.Module):
         rbf: Tensor,
         cbf: Tensor,
         sbf: Tensor,
+        idx_s: Tensor,
         idx_swap: Tensor,
+        basis_idx1: Tensor,
+        basis_idx2: Tensor,
     ) -> Tensor:
         """
         Args:
@@ -723,31 +732,42 @@ class QuadrupletInteraction(nn.Module):
             rbf (Tensor): RBF with (E, emb_size_rbf) shape.
             cbf (Tensor): CBF with (E, NB, emb_size_cbf) shape.
             sbf (Tensor): SBF with (E, NB, emb_size_sbf) shape.
+            idx_s (Tensor): index of source atom with (E) shape.
             idx_swap (Tensor): swap index of edge with (E) shape.
+            basis_idx1 (Tensor): basis index of first proximity edge with (N, NB) shape.
+            basis_idx2 (Tensor): basis index of second proximity edge with (N, NB) shape.
 
         Returns:
             x4 (Tensor): Qudruplet interaction embedding with (E, emb_size_edge) shape.
         """
-        # ---------- Geometric MP ----------
-        m_st = m_st.unsqueeze(1)  # (E, 1, emb_size_edge)
-        rbf = rbf.unsqueeze(1)  # (E, 1, emb_size_rbf)
+        basis_idx1 = basis_idx1[idx_s].flatten()  # (E*NB)
+        basis_idx2 = basis_idx2[idx_s].flatten()  # (E*NB)
 
-        m_st = self.mlp_m_rbf(m_st)
-        m_st2 = m_st * self.mlp_rbf(rbf)
-        m_st = self.scale_rbf(m_st2, ref=m_st)  # (E, 1, emb_size_edge)
+        # ---------- Geometric MP ----------
+        m_st = self.mlp_m_rbf(m_st)  # (E, emb_size_edge)
+        m_st_rbf = m_st * self.mlp_rbf(rbf)
+        m_st = self.scale_rbf(m_st_rbf, ref=m_st).unsqueeze(0)  # (E, 1, emb_size_edge)
 
         E, NB, _ = cbf.size()
-        m_st = m_st.expand(E, NB, -1)  # (E, NB emb_size_edge)
-        m_st = self.mlp_m_cbf(m_st)
-        m_st2 = m_st * self.mlp_cbf(cbf)
-        m_st = self.scale_cbf(m_st2, ref=m_st)  # (E, NB, emb_size_edge)
+        cbf = cbf.view(E * NB, -1)  # (E*NB, emb_size_cbf)
+        m_st_nb = m_st.expand(E, NB, -1).view(E * NB, -1)  # (E*NB emb_size_edge)
+        m_st_nb = self.mlp_m_cbf(m_st_nb)
+        m_st_nb = m_st_nb[basis_idx1] + m_st_nb[basis_idx2]
+        m_st_nb = m_st_nb * self.inv_sqrt_2
+        m_st_cbf = m_st_nb * self.mlp_cbf(cbf)  # (E*NB, emb_size_edge)
+        m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E*NB, emb_size_edge)
 
-        m_st = self.mlp_m_sbf(m_st)
-        m_st2 = m_st * self.mlp_sbf(sbf)
-        m_st = self.scale_sbf(m_st2, ref=m_st)  # (E, NB, emb_size_edge)
+        sbf = sbf.view(E * NB, -1)  # (E*NB, emb_size_sbf)
+        m_st_nb = self.mlp_m_sbf(m_st_nb)
+        m_st_nb = m_st_nb[basis_idx1] + m_st_nb[basis_idx2]
+        m_st_nb = m_st_nb * self.inv_sqrt_2
+        m_st_sbf = m_st_nb * self.mlp_sbf(sbf)  # (E*NB, emb_size_edge)
+        m_st_nb = self.scale_sbf(m_st_sbf, ref=m_st_nb)  # (E*NB, emb_size_edge)
+
+        m_st_nb = m_st_nb.view(E, NB, -1)  # (E, NB, emb_size_edge)
 
         # ---------- Basis MP ----------
-        x = m_st.sum(1)  # (E, emb_size_edge)
+        x = m_st_nb.sum(1)  # (E, emb_size_edge)
         x = x * self.inv_sqrt_neighbor
         x = self.mlp_direction(x)
 
@@ -811,34 +831,38 @@ class TripletInteraction(nn.Module):
         m_st: Tensor,
         rbf: Tensor,
         cbf: Tensor,
+        idx_s: Tensor,
         idx_swap: Tensor,
+        basis_idx1: Tensor,
     ) -> Tensor:
         """
         Args:
             m_st (Tensor): Edge embedding with (E, emb_size_edge) shape.
             rbf (Tensor): RBF with (E, emb_size_rbf) shape.
             cbf (Tensor): CBF with (E, NB, emb_size_cbf) shape.
+            idx_s (Tensor): index of source atom with (E) shape.
             idx_swap (Tensor): swap index of edge with (E) shape.
+            basis_idx1 (Tensor): basis index of first proximity edge with (N, NB) shape.
 
         Returns:
             x3 (Tensor): Triplet interaction embedding with (E, emb_size_edge) shape.
         """
-        # ---------- Geometric MP ----------
-        m_st = m_st.unsqueeze(1)  # (E, NB, emb_size_edge)
-        rbf = rbf.unsqueeze(1)  # (E, NB, emb_rbf)
+        basis_idx1 = basis_idx1[idx_s].flatten()  # (E*NB)
 
+        # ---------- Geometric MP ----------
         m_st = self.mlp_m_rbf(m_st)
-        m_st2 = m_st * self.mlp_rbf(rbf)
-        m_st = self.scale_rbf(m_st2, ref=m_st)  # (E, 1, emb_size_edge)
+        m_st_rbf = m_st * self.mlp_rbf(rbf)
+        m_st = self.scale_rbf(m_st_rbf, ref=m_st).unsqueeze(0)  # (E, 1, emb_size_edge)
 
         E, NB, _ = cbf.size()
-        m_st = m_st.expand(E, NB, -1)  # (E, NB, emb_size_edge)
-        m_st = self.mlp_m_cbf(m_st)
-        m_st2 = m_st * self.mlp_cbf(cbf)
-        m_st = self.scale_cbf(m_st2, ref=m_st)  # (E, NB, emb_size_edge)
+        m_st_nb = m_st.expand(E, NB, -1)  # (E, NB, emb_size_edge)
+        m_st_nb = self.mlp_m_cbf(m_st_nb)
+        m_st_nb = m_st_nb[basis_idx1]
+        m_st_cbf = m_st_nb * self.mlp_cbf(cbf)
+        m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E, NB, emb_size_edge)
 
         # ---------- Basis MP ----------
-        x = m_st.sum(1)  # (E, emb_size_edge)
+        x = m_st_nb.sum(1)  # (E, emb_size_edge)
         x = x * self.inv_sqrt_neighbor
         x = self.mlp_direction(x)
 
