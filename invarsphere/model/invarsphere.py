@@ -748,25 +748,22 @@ class QuadrupletInteraction(nn.Module):
         # ---------- Geometric MP ----------
         m_st = self.mlp_m_rbf(m_st)  # (E, emb_size_edge)
         m_st_rbf = m_st * self.mlp_rbf(rbf)
-        m_st = self.scale_rbf(m_st_rbf, ref=m_st).unsqueeze(1)  # (E, 1, emb_size_edge)
+        m_st = self.scale_rbf(m_st_rbf, ref=m_st)  # (E, emb_size_edge)
 
         E, NB, _ = cbf.size()
-        cbf = cbf.view(E * NB, -1)  # (E*NB, emb_size_cbf)
-        m_st_nb = m_st.expand(E, NB, -1).contiguous().view(E * NB, -1)  # (E*NB emb_size_edge)
-        m_st_nb = self.mlp_m_cbf(m_st_nb)
-        m_st_nb = m_st_nb[basis_idx1] + m_st_nb[basis_idx2]
+        cbf = cbf.reshape(E * NB, -1)  # (E*NB, emb_size_cbf)
+        m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_size_edge)
+        m_st_nb = m_st_nb[basis_idx1] + m_st_nb[basis_idx2]  # (E*NB, emb_size_edge)
         m_st_nb = m_st_nb * self.inv_sqrt_2
         m_st_cbf = m_st_nb * self.mlp_cbf(cbf)  # (E*NB, emb_size_edge)
         m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E*NB, emb_size_edge)
 
-        sbf = sbf.view(E * NB, -1)  # (E*NB, emb_size_sbf)
-        m_st_nb = self.mlp_m_sbf(m_st_nb)
-        m_st_nb = m_st_nb[basis_idx1] + m_st_nb[basis_idx2]
-        m_st_nb = m_st_nb * self.inv_sqrt_2
+        sbf = sbf.reshape(E * NB, -1)  # (E*NB, emb_size_sbf)
+        m_st_nb = self.mlp_m_sbf(m_st_nb)  # (E*NB, emb_size_edge)
         m_st_sbf = m_st_nb * self.mlp_sbf(sbf)  # (E*NB, emb_size_edge)
         m_st_nb = self.scale_sbf(m_st_sbf, ref=m_st_nb)  # (E*NB, emb_size_edge)
 
-        m_st_nb = m_st_nb.view(E, NB, -1)  # (E, NB, emb_size_edge)
+        m_st_nb = m_st_nb.reshape(E, NB, -1)  # (E, NB, emb_size_edge)
 
         # ---------- Basis MP ----------
         x = m_st_nb.sum(1)  # (E, emb_size_edge)
@@ -854,17 +851,16 @@ class TripletInteraction(nn.Module):
         # ---------- Geometric MP ----------
         m_st = self.mlp_m_rbf(m_st)
         m_st_rbf = m_st * self.mlp_rbf(rbf)
-        m_st = self.scale_rbf(m_st_rbf, ref=m_st).unsqueeze(1)  # (E, 1, emb_size_edge)
+        m_st = self.scale_rbf(m_st_rbf, ref=m_st)  # (E, emb_size_edge)
 
         E, NB, _ = cbf.size()
-        cbf = cbf.view(E * NB, -1)  # (E*NB, emb_size_cbf)
-        m_st_nb = m_st.expand(E, NB, -1).contiguous().view(E * NB, -1)  # (E, NB, emb_size_edge)
-        m_st_nb = self.mlp_m_cbf(m_st_nb)
-        m_st_nb = m_st_nb[basis_idx1]
+        cbf = cbf.reshape(E * NB, -1)  # (E*NB, emb_size_cbf)
+        m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_size_edge)
+        m_st_nb = m_st_nb[basis_idx1]  # (E*NB, emb_size_edge)
         m_st_cbf = m_st_nb * self.mlp_cbf(cbf)
         m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E, NB, emb_size_edge)
 
-        m_st_nb = m_st_nb.view(E, NB, -1)  # (E, NB, emb_size_edge)
+        m_st_nb = m_st_nb.reshape(E, NB, -1)  # (E, NB, emb_size_edge)
 
         # ---------- Basis MP ----------
         x = m_st_nb.sum(1)  # (E, emb_size_edge)
