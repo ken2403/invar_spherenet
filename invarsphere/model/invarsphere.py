@@ -279,7 +279,7 @@ class InvarianceSphereNet(BaseMPNN):
 
         return graph
 
-    def forward(self, graph: Batch):
+    def forward(self, graph: Batch) -> tuple[Tensor, Tensor]:
         if self.regress_forces and not self.direct_forces:
             graph[GraphKeys.Pos].requires_grad_(True)
 
@@ -386,7 +386,7 @@ class InvarianceSphereNet(BaseMPNN):
 
                 graph[GraphKeys.Pos].requires_grad = False
         else:
-            F_n = 0
+            F_n = z.new_zeros(1)
 
         return E_b, F_n
 
