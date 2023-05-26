@@ -116,6 +116,8 @@ def atoms2graphdata(
     edge_shift = s[1:]
     if n_neighbor_basis:
         rotation_matrix = rm[1:]
+        basis_idx_1 = basis_idx_1[1:]
+        basis_idx_2 = basis_idx_2[1:]
 
     # order is "source_to_target"
     data = Data(edge_index=torch.stack([torch.LongTensor(edge_src), torch.LongTensor(edge_dst)], dim=0))
