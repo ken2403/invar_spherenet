@@ -688,6 +688,8 @@ class QuadrupletInteraction(nn.Module):
     ):
         super().__init__()
 
+        assert emb_quad % 2 == 0
+
         self.mlp_m_rbf = nn.Sequential(
             Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
@@ -696,7 +698,7 @@ class QuadrupletInteraction(nn.Module):
         self.scale_rbf = ScaleFactor()
 
         self.mlp_m_cbf = nn.Sequential(
-            Dense(emb_size_edge, emb_quad, bias=False, weight_init=weight_init),
+            Dense(emb_size_edge, emb_quad // 2, bias=False, weight_init=weight_init),
             activation,
         )
         self.mlp_cbf = Dense(emb_size_cbf, emb_quad, bias=False, weight_init=weight_init)
@@ -761,23 +763,23 @@ class QuadrupletInteraction(nn.Module):
 
         E, NB, _ = cbf.size()
         cbf = cbf.reshape(E * NB, -1)  # (E*NB, emb_size_cbf)
-        m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_size_edge)
-        m_st_nb = m_st_nb[basis_idx1] + m_st_nb[basis_idx2]  # (E*NB, emb_size_edge)
-        m_st_nb = m_st_nb * self.inv_sqrt_2
-        m_st_cbf = m_st_nb * self.mlp_cbf(cbf)  # (E*NB, emb_size_edge)
-        m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E*NB, emb_size_edge)
+        m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_quad/2)
+        m_st_nb = torch.concat((m_st_nb[basis_idx1], m_st_nb[basis_idx2]), dim=-1)  # (E*NB, emb_quad)
+        # m_st_nb = m_st_nb * self.inv_sqrt_2
+        m_st_cbf = m_st_nb * self.mlp_cbf(cbf)  # (E*NB, emb_quad)
+        m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E*NB, emb_quad)
 
         sbf = sbf.reshape(E * NB, -1)  # (E*NB, emb_size_sbf)
-        m_st_nb = self.mlp_m_sbf(m_st_nb)  # (E*NB, emb_size_edge)
-        m_st_sbf = m_st_nb * self.mlp_sbf(sbf)  # (E*NB, emb_size_edge)
-        m_st_nb = self.scale_sbf(m_st_sbf, ref=m_st_nb)  # (E*NB, emb_size_edge)
+        m_st_nb = self.mlp_m_sbf(m_st_nb)  # (E*NB, emb_quad)
+        m_st_sbf = m_st_nb * self.mlp_sbf(sbf)  # (E*NB, emb_quad)
+        m_st_nb = self.scale_sbf(m_st_sbf, ref=m_st_nb)  # (E*NB, emb_quad)
 
-        m_st_nb = m_st_nb.reshape(E, NB, -1)  # (E, NB, emb_size_edge)
+        m_st_nb = m_st_nb.reshape(E, NB, -1)  # (E, NB, emb_quad)
 
         # ---------- Basis MP ----------
-        x = m_st_nb.sum(1)  # (E, emb_size_edge)
+        x = m_st_nb.sum(1)  # (E, emb_quad)
         x = x * self.inv_sqrt_neighbor
-        x = self.mlp_direction(x)
+        x = self.mlp_direction(x)  # (E, emb_size_edge)
 
         # ---------- Update embeddings ----------
         x_st = self.mlp_st(x)  # (E, emb_size_edge)
@@ -865,17 +867,17 @@ class TripletInteraction(nn.Module):
 
         E, NB, _ = cbf.size()
         cbf = cbf.reshape(E * NB, -1)  # (E*NB, emb_size_cbf)
-        m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_size_edge)
-        m_st_nb = m_st_nb[basis_idx1]  # (E*NB, emb_size_edge)
-        m_st_cbf = m_st_nb * self.mlp_cbf(cbf)
-        m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E, NB, emb_size_edge)
+        m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_triplet)
+        m_st_nb = m_st_nb[basis_idx1]  # (E*NB, emb_triplet)
+        m_st_cbf = m_st_nb * self.mlp_cbf(cbf)  # (E*NB, emb_triplet)
+        m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E, NB, emb_triplet)
 
-        m_st_nb = m_st_nb.reshape(E, NB, -1)  # (E, NB, emb_size_edge)
+        m_st_nb = m_st_nb.reshape(E, NB, -1)  # (E, NB, emb_triplet)
 
         # ---------- Basis MP ----------
-        x = m_st_nb.sum(1)  # (E, emb_size_edge)
+        x = m_st_nb.sum(1)  # (E, emb_triplet)
         x = x * self.inv_sqrt_neighbor
-        x = self.mlp_direction(x)
+        x = self.mlp_direction(x)  # (E, emb_size_edge)
 
         # ---------- Update embeddings ----------
         x_st = self.mlp_st(x)  # (E, emb_size_edge)
