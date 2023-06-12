@@ -8,16 +8,111 @@ from torch import Tensor
 from torch_scatter import segment_csr
 
 
-def block_repeat(t: Tensor, block_size: np.ndarray, repeats: np.ndarray) -> Tensor:
-    col_index = torch.arange(t.size(1))
+def block_repeat(
+    t: Tensor,
+    block_size: np.ndarray | Tensor,
+    repeats: np.ndarray | Tensor,
+    dim: int = 0,
+    return_index: bool = False,
+) -> Tensor:
+    """Repeat each block of the tensor separately.
+
+    Args:
+        t (torch.Tensor): Tensor to repeat
+        block_size (np.ndarray | torch.Tensor): Size of each block to repeat
+        repeats (np.ndarray | torch.Tensor): Number of times to repeat each block
+        dim (int, optional): Dimension to repeat along. Defaults to `0`.
+        return_index (bool, optional): Whether to return the indices used for. Defaults to `False`. If `True`, returns the indices only.
+
+    Raises:
+        ValueError: If block sizes do not match tensor size or if dim is not 0 and 1
+
+    Example:
+        t: [1,2,3,4,5,6,7]
+        block_size: [2,3,2]
+        repeats: [3,3,2]
+        return: [
+                    1, 2, 1, 2, 1, 2,
+                    3, 4, 5, 3, 4, 5, 3, 4, 5,
+                    6, 7, 6, 7,
+                ]
+
+        t: [1,2,3,4,5,6,7]
+        block_size: [2,3,2]
+        repeats: [3,3,2]
+        return_index: True
+        return: [
+                    0, 1, 0, 1, 0, 1,
+                    2, 3, 4, 2, 3, 4, 2, 3, 4,
+                    5, 6, 5, 6,
+                ]
+    """  # noqa: E501
+    if dim != 0 and dim != 1:
+        raise ValueError("Only dim 0 and 1 supported")
+    col_index = torch.arange(t.size(dim))
+    if col_index.size(0) != block_size.sum():
+        raise ValueError("Block sizes do not match tensor size")
     indices = []
     start = 0
 
     for i, b in enumerate(block_size):
-        indices.append(torch.tile(col_index[start : start + b], (repeats[i],)))  # noqa: E203
+        indices.append(torch.tile(col_index[start : start + b], (int(repeats[i].item()),)))  # noqa: E203
         start += b
     indices_tensor = torch.cat(indices, dim=0).to(t.device).long()
-    return t[..., indices_tensor]
+    if return_index:
+        return indices_tensor
+    else:
+        return t[..., indices_tensor] if dim == 1 else t[indices_tensor]
+
+
+def block_repeat_each(
+    t: Tensor,
+    block_size: np.ndarray | Tensor,
+    repeats: np.ndarray | Tensor,
+    return_index: bool = False,
+) -> Tensor:
+    """Repeat each block of the tensor separately. When repeating, repeat
+    element by element. Corresponds to repetition in first dimension only.
+
+    Args:
+        t (torch.Tensor): Tensor to repeat
+        block_size (np.ndarray | torch.Tensor): Size of each block to repeat
+        repeats (np.ndarray | torch.Tensor): Number of times to repeat each block
+        return_index (bool, optional): Whether to return the indices used for. Defaults to `False`. If `True`, returns the indices only.
+
+    Example:
+        t: [1,2,3,4,5,6,7]
+        block_size: [2,3,2]
+        repeats: [3,3,2]
+        return: [
+                    1, 1, 1, 2, 2, 2,
+                    3, 3, 3, 4, 4, 4, 5, 5, 5,
+                    6, 6, 7, 7,
+                ]
+
+        t: [1,2,3,4,5,6,7]
+        block_size: [2,3,2]
+        repeats: [3,2,3]
+        return_index: True
+        return: [
+                    0, 0, 0, 1, 1, 1,
+                    2, 2, 2, 3, 3, 3, 4, 4, 4,
+                    5, 5, 6, 6,
+                ]
+    """  # noqa: E501
+    # dim = 0 only
+    col_index = torch.arange(t.size(0))
+    indices = []
+    start = 0
+
+    for i, b in enumerate(block_size):
+        indices.append(torch.repeat_interleave(col_index[start : start + b], repeats[i]))  # noqa: E203
+        start += b
+    indices_tensor = torch.cat(indices, dim=0).to(t.device).long()
+    if return_index:
+        return indices_tensor
+    else:
+        return t[indices_tensor]
 
 
 def repeat_blocks(
@@ -39,8 +134,7 @@ def repeat_blocks(
     repeat_inc: Number to increment by after each repetition,
                 either global or per block
 
-    Examples
-    --------
+    Example:
         sizes = [1,3,2] ; repeats = [3,2,3] ; continuous_indexing = False
         Return: [0 0 0  0 1 2 0 1 2  0 1 0 1 0 1]
         sizes = [1,3,2] ; repeats = [3,2,3] ; continuous_indexing = True

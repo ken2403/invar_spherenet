@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from ..utils.calc import block_repeat
+from ..utils.repeat_tensor import block_repeat
 
 
 class SphericalHarmonicsWithBessel(nn.Module):
@@ -63,7 +63,7 @@ class SphericalHarmonicsWithBessel(nn.Module):
             repeats_sbb = torch.tensor(np.repeat(2 * np.arange(self.max_l) + 1, repeats=self.max_n), device=device)
             block_size = 2 * np.arange(self.max_l) + 1
         expanded_sbb = torch.repeat_interleave(sbb, repeats=repeats_sbb, dim=-1)
-        expanded_shb = block_repeat(shb, block_size=block_size, repeats=np.array([self.max_n] * self.max_l))
+        expanded_shb = block_repeat(shb, block_size=block_size, repeats=np.array([self.max_n] * self.max_l), dim=1)
         shape = self.max_n * self.max_l
         if self.use_phi:
             shape *= self.max_l

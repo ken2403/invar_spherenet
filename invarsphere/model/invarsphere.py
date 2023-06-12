@@ -17,7 +17,7 @@ from ..nn.basis import SphericalBesselFunction, SphericalHarmonicsWithBessel
 from ..nn.cutoff import BaseCutoff
 from ..nn.scaling.compat import load_scales_compat
 from ..nn.scaling.scale_factor import ScaleFactor
-from ..utils.calc import repeat_blocks
+from ..utils.repeat_tensor import repeat_blocks
 from ..utils.resolve import activation_resolver, cutoffnet_resolver, init_resolver
 from .base import BaseMPNN
 
@@ -698,7 +698,7 @@ class QuadrupletInteraction(nn.Module):
         self.scale_rbf = ScaleFactor()
 
         self.mlp_m_cbf = nn.Sequential(
-            Dense(emb_size_edge, emb_quad // 2, bias=False, weight_init=weight_init),
+            Dense(emb_size_edge, emb_quad, bias=False, weight_init=weight_init),
             activation,
         )
         self.mlp_cbf = Dense(emb_size_cbf, emb_quad, bias=False, weight_init=weight_init)
@@ -764,8 +764,8 @@ class QuadrupletInteraction(nn.Module):
         E, NB, _ = cbf.size()
         cbf = cbf.reshape(E * NB, -1)  # (E*NB, emb_size_cbf)
         m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_quad/2)
-        m_st_nb = torch.concat((m_st_nb[basis_idx1], m_st_nb[basis_idx2]), dim=-1)  # (E*NB, emb_quad)
-        # m_st_nb = m_st_nb * self.inv_sqrt_2
+        m_st_nb = m_st_nb[basis_idx1] + m_st_nb[basis_idx2]  # (E*NB, emb_quad)
+        m_st_nb = m_st_nb * self.inv_sqrt_2
         m_st_cbf = m_st_nb * self.mlp_cbf(cbf)  # (E*NB, emb_quad)
         m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E*NB, emb_quad)
 
