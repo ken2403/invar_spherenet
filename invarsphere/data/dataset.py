@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+
 import ase
+import torch
 from numpy import ndarray
 from torch import Tensor
 from torch_geometric.data import Data, Dataset
@@ -9,9 +12,10 @@ from .convert import atoms2graphdata, graphdata2atoms, set_properties
 
 
 class BaseGraphDataset(Dataset):
-    def __init__(self, cutoff: float):
+    def __init__(self, cutoff: float, save_dir: str):
         super().__init__()
         self.cutoff = cutoff
+        self.save_dir = save_dir
 
     def len(self) -> int:
         raise NotImplementedError
@@ -44,48 +48,48 @@ class List2GraphDataset(BaseGraphDataset):
 
     def __init__(
         self,
-        structures: list[ase.Atoms],
+        atoms_list: list[ase.Atoms],
         y_values: dict[str, list[int | float | str | ndarray | Tensor] | ndarray | Tensor],
         cutoff: float,
-        max_neighbors: int = 32,
+        save_dir: str,
         subtract_center_of_mass: bool = False,
-        n_neighbor_basis: int = 4,
-        basis_cutoff: float = 15,
+        max_n_neighbor_basis: int = 4,
+        basis_cutoff: float = 10,
         remove_batch_key: list[str] | None = None,
+        preprocess: bool = True,
     ):
         """
         Args:
-           structures (list[ase.Atoms]): list of ase.Atoms object
+           atoms_list (list[ase.Atoms]): list of ase.Atoms object
            y_values (dict[str, list[int | float | str | ndarray | Tensor] | ndarray | Tensor]): dict of physical properties. The key is the name of the property, and the value is the corresponding value of the property.
            cutoff (float): the cutoff radius for computing the neighbor list
-           max_neighbors (int, optional): Threshold of neighboring atoms to be considered. Defaults to `32`.
+           save_dir (str): the directory to save the dataset
            subtract_center_of_mass (bool, optional): Whether to subtract the center of mass from the cartesian coordinates. Defaults to `False`.
-           n_neighbor_basis (int, optional): the number of the neighbor basis for each node. Defaults to `0`.
-           basis_cutoff (float, optional): the cutoff radius for computing neighbor basis
+           max_n_neighbor_basis (int): The maximum number of neighbors to be considered for each atom. Defaults to `4`.
+           basis_cutoff (float): The cutoff radius for computing the neighbor basis. Defaults to `10`.
            remove_batch_key (list[str] | None, optional): List of property names that do not add dimension for batch. Defaults to `None`.
+           preprocess (bool, optional): Whether to preprocess the dataset. Defaults to `True`.
         """  # noqa: E501
-        super().__init__(cutoff)
-        self.max_neighbors = max_neighbors
+        super().__init__(cutoff, save_dir)
         self.subtract_center_of_mass = subtract_center_of_mass
-        self.n_neighbor_basis = n_neighbor_basis
+        self.max_n_neighbor_basis = max_n_neighbor_basis
         self.basis_cutoff = basis_cutoff
-        self.graph_data_list: list[Data] = []
         self.remove_batch_key = remove_batch_key
-        self._preprocess(structures, y_values)
+        if preprocess:
+            self.process(atoms_list, y_values)
 
-    def _preprocess(
+    def process(
         self,
-        atoms: list[ase.Atoms],
+        atoms_list: list[ase.Atoms],
         y_values: dict[str, list[int | float | str | ndarray | Tensor] | ndarray | Tensor],
     ):
-        for i, at in enumerate(atoms):
+        for i, at in enumerate(atoms_list):
             assert isinstance(at, ase.Atoms)
             data = atoms2graphdata(
                 at,
                 self.subtract_center_of_mass,
                 self.cutoff,
-                self.max_neighbors,
-                self.n_neighbor_basis,
+                self.max_n_neighbor_basis,
                 self.basis_cutoff,
             )
             for k, v in y_values.items():
@@ -93,15 +97,16 @@ class List2GraphDataset(BaseGraphDataset):
                 if self.remove_batch_key is not None and k in self.remove_batch_key:
                     add_batch = False
                 set_properties(data, k, v[i], add_batch)
-            self.graph_data_list.append(data)
+            torch.save(f"{self.save_dir}/{i}.pt", data)
 
     def len(self) -> int:
-        if len(self.graph_data_list) == 0:
-            raise ValueError("The dataset is empty.")
-        return len(self.graph_data_list)
+        length = len(os.listdir(self.save_dir))
+        if length == 0:
+            raise ValueError("The dataset is empty. Please set preprocess=True.")
+        return length
 
     def get(self, idx: int) -> Data:
-        return self.graph_data_list[idx]
+        return torch.load(f"{self.save_dir}/{idx}.pt")
 
     def get_atoms(self, idx: int) -> ase.Atoms:
-        return graphdata2atoms(self.graph_data_list[idx])
+        return graphdata2atoms(self.get(idx))

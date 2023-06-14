@@ -18,11 +18,8 @@ def atoms2graphdata(
     atoms: ase.Atoms,
     subtract_center_of_mass: bool,
     cutoff: float,
-    max_neighbors: int,
-    n_neighbor_basis: int = 0,
-    basis_cutoff: float = 15.0,
-    properties: dict[str, int | float | str | ndarray | Tensor] = {},
-    remove_batch_key: set[str] = {""},
+    max_n_neighbor_basis: int,
+    basis_cutoff: float,
 ) -> Data:
     """Convert one `ase.Atoms` object to `torch_geometric.data.Data` with edge
     index information include pbc.
@@ -42,18 +39,19 @@ def atoms2graphdata(
     edge_src, edge_dst, dist, edge_vec, edge_shift = neighbor_list(
         "ijdDS",
         a=atoms,
-        cutoff=basis_cutoff if n_neighbor_basis else cutoff,
+        cutoff=basis_cutoff,
         self_interaction=False,
     )
 
-    # only max_neighbors
-    idx_s = np.zeros(1, dtype=int) - 100
-    idx_t = np.zeros(1, dtype=int) - 100
-    s = np.zeros((1, 3)) - 100
-    if n_neighbor_basis:
-        rm = np.zeros((1, n_neighbor_basis, 3, 3))
-        basis_idx_1 = np.zeros((1, n_neighbor_basis), dtype=int) - 100
-        basis_idx_2 = np.zeros((1, n_neighbor_basis), dtype=int) - 100
+    idx_s = []
+    idx_t = []
+    shift = []
+    if max_n_neighbor_basis:
+        rm = []
+        basis_node_idx = []
+        basis_edge_idx1 = []
+        basis_edge_idx2 = []
+        # basis_edge_idx3 = []
 
     n_ind = 0
     unique = np.unique(edge_src)
@@ -61,92 +59,118 @@ def atoms2graphdata(
         center_mask = edge_src == i
         dist_i = dist[center_mask]
         sorted_ind = np.argsort(dist_i)
-        dist_mask = (dist_i <= cutoff)[sorted_ind]
+        if cutoff is not None:
+            dist_mask = (dist_i <= cutoff)[sorted_ind]
+        else:
+            dist_mask = np.ones_like(sorted_ind, dtype=bool)
         # center_mask to retrieve information on central atom i
         # reorder by soreted_ind in order of distance
         # extract only the information within the cutoff radius with dist_mask
-        # indexing to take out only the max_neighbor neighborhoods
-        idx_s = np.concatenate([idx_s, edge_src[center_mask][sorted_ind][dist_mask][:max_neighbors]], axis=0)
-        idx_t = np.concatenate([idx_t, edge_dst[center_mask][sorted_ind][dist_mask][:max_neighbors]], axis=0)
-        s = np.concatenate([s, edge_shift[center_mask][sorted_ind][dist_mask][:max_neighbors]], axis=0)
+        idx_s_i = edge_src[center_mask][sorted_ind]
+        idx_s.append(idx_s_i[dist_mask])
+        idx_t.append(edge_dst[center_mask][sorted_ind][dist_mask])
+        shift.append(edge_shift[center_mask][sorted_ind][dist_mask])
 
         # rotation matrix
-        if n_neighbor_basis:
-            rm_atom = np.zeros((1, 3, 3))
-            basis_idx_1_atom = np.zeros(1, dtype=int)
-            basis_idx_2_atom = np.zeros(1, dtype=int)
+        if max_n_neighbor_basis:
+            triple_edge_idx = _get_triple_edge_idx(idx_s_i, 1)
             i1 = 0
             cnt = 0
-            while cnt < n_neighbor_basis:
+            while cnt < max_n_neighbor_basis:
                 # nearest_vec has a coordinate component in the row direction
                 try:
-                    nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
+                    first_vec = edge_vec[center_mask][sorted_ind][triple_edge_idx[i1][0]]
+                    second_vec = edge_vec[center_mask][sorted_ind][triple_edge_idx[i1][1]]
                 except IndexError:
-                    errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {basis_cutoff}"  # noqa: E501
-                    logging.error(errm)
-                    raise IndexError(errm)
+                    logging.info(f"only {cnt} neighbor_basis are found for {i}th atom in {atoms.symbol}")
+                    break
+                nearest_vec = np.stack([first_vec, second_vec], axis=0)
                 # Transpose to have a coordinate component in the column direction.
                 nearest_vec = nearest_vec.T
                 q = _schmidt_3d(nearest_vec)
                 # If two vectors are not first order independent, the q value become nan
-                while np.isnan(q).any():
+                if np.isnan(q).any():
                     i1 += 1
-                    try:
-                        nearest_vec = edge_vec[center_mask][sorted_ind[[i1, i1 + 1]]]
-                    except IndexError:
-                        errm = f"Cannot generate {i1+1}th nearest neighbor coordinate system of {atoms}, please increase {basis_cutoff}"  # noqa: E501
-                        logging.error(errm)
-                        raise IndexError(errm)
-                    # Transpose to have a coordinate component in the column direction.
-                    nearest_vec = nearest_vec.T
-                    q = _schmidt_3d(nearest_vec)
+                    continue
+
                 # Transpose the original coordinates so that they can be transformed by matrix product
-                rm_atom = np.concatenate([rm_atom, q.T[np.newaxis, ...]], axis=0)
+                rm.append(q.T)
                 # The index of the edge is sorted,
                 # so it stores how many indexes are in the range (i.e., i1)
-                basis_idx_1_atom = np.concatenate([basis_idx_1_atom, np.array([i1 + n_ind])], axis=0)
-                basis_idx_2_atom = np.concatenate([basis_idx_2_atom, np.array([i1 + n_ind + 1])], axis=0)
+                basis_node_idx.append(i)
+                basis_edge_idx1.append(triple_edge_idx[i1][0] + n_ind)
+                basis_edge_idx2.append(triple_edge_idx[i1][1] + n_ind)
                 cnt += 1
                 i1 += 1
 
-            rm = np.concatenate([rm, rm_atom[1:][np.newaxis, ...]], axis=0)
-            basis_idx_1 = np.concatenate([basis_idx_1, basis_idx_1_atom[1:][np.newaxis, ...]], axis=0)
-            basis_idx_2 = np.concatenate([basis_idx_2, basis_idx_2_atom[1:][np.newaxis, ...]], axis=0)
-
             # keep n_ind for basis edge_index
-            n_ind = idx_s.shape[0] - 1
+            n_ind = idx_s[-1].shape[0] - 1
 
-    edge_src = idx_s[1:]
-    edge_dst = idx_t[1:]
-    edge_shift = s[1:]
-    if n_neighbor_basis:
-        rotation_matrix = rm[1:]
-        basis_idx_1 = basis_idx_1[1:]
-        basis_idx_2 = basis_idx_2[1:]
+    edge_src = np.array(idx_s)
+    edge_dst = np.array(idx_t)
+    edge_shift = np.array(shift)
+    if max_n_neighbor_basis:
+        rotation_matrix_arr = np.array(rm)
+        basis_node_idx_arr = np.array(basis_node_idx)
+        basis_edge_idx1_arr = np.array(basis_edge_idx1)
+        basis_edge_idx2_arr = np.array(basis_edge_idx2)
+        # basis_edge_idx3_arr = np.array(basis_edge_idx3)
 
-    # order is "source_to_target"
+    # edge_index order is "source_to_target"
     data = Data(edge_index=torch.stack([torch.LongTensor(edge_src), torch.LongTensor(edge_dst)], dim=0))
-
-    data[GraphKeys.Neighbors] = torch.tensor([edge_dst.shape[0]])
+    # node info
     data[GraphKeys.Pos] = torch.tensor(atoms.get_positions(), dtype=torch.float32)
     data[GraphKeys.Z] = torch.tensor(atoms.numbers, dtype=torch.long)
-    if n_neighbor_basis:
-        data[GraphKeys.Rot_mat] = torch.tensor(rotation_matrix, dtype=torch.float32)
-        data[GraphKeys.Basis_edge_idx1] = torch.tensor(basis_idx_1, dtype=torch.long)
-        data[GraphKeys.Basis_edge_idx2] = torch.tensor(basis_idx_2, dtype=torch.long)
-    # add batch dimension
-    data[GraphKeys.PBC] = torch.tensor(atoms.pbc, dtype=torch.long).unsqueeze(0)
-    data[GraphKeys.Lattice] = torch.tensor(atoms.cell.array, dtype=torch.float32).unsqueeze(0)
+    # edge info
     data[GraphKeys.Edge_shift] = torch.tensor(edge_shift, dtype=torch.float32)
 
-    # set properties
-    for k, v in properties.items():
-        add_batch = True
-        if remove_batch_key is not None and k in remove_batch_key:
-            add_batch = False
-        set_properties(data, k, v, add_batch)
+    if max_n_neighbor_basis:
+        data[GraphKeys.Rot_mat] = torch.tensor(rotation_matrix_arr, dtype=torch.float32)
+        data[GraphKeys.Basis_node_idx] = torch.tensor(basis_node_idx_arr, dtype=torch.long)
+        data[GraphKeys.Basis_edge_idx1] = torch.tensor(basis_edge_idx1_arr, dtype=torch.long)
+        data[GraphKeys.Basis_edge_idx2] = torch.tensor(basis_edge_idx2_arr, dtype=torch.long)
+        # data[GraphKeys.Basis_edge_idx3] = torch.tensor(basis_edge_idx3_arr, dtype=torch.long)
+
+    # graph info
+    data[GraphKeys.Lattice] = torch.tensor(atoms.cell.array, dtype=torch.float32).unsqueeze(0)
+    data[GraphKeys.PBC] = torch.tensor(atoms.pbc, dtype=torch.long).unsqueeze(0)
+    data[GraphKeys.Neighbors] = torch.tensor([edge_dst.shape[0]])
 
     return data
+
+
+def _get_triple_edge_idx(edge_src: ndarray, n_nodes: int) -> ndarray:
+    first_col = edge_src.reshape(-1, 1)
+    all_indices = np.arange(n_nodes).reshape(1, -1)
+    n_bond_per_atom = np.count_nonzero(first_col == all_indices, axis=0)
+    n_triple_i = n_bond_per_atom * (n_bond_per_atom - 1)
+    n_triple = np.sum(n_triple_i)
+    triple_edge_idx = np.empty((n_triple, 2), dtype=np.int64)
+
+    start = 0
+    cs = 0
+    for n in n_bond_per_atom:
+        if n > 0:
+            """triple_bond_indices is generated from all pair permutations of
+            atom indices.
+
+            The
+            numpy version below does this with much greater efficiency. The equivalent slow
+            code is:
+            ```
+            for j, k in itertools.permutations(range(n), 2):
+                triple_bond_indices[index] = [start + j, start + k]
+            ```
+            """
+            r = np.arange(n)
+            x, y = np.meshgrid(r, r)
+            c = np.stack([y.ravel(), x.ravel()], axis=1)
+            final = c[c[:, 0] != c[:, 1]]
+            triple_edge_idx[start : start + (n * (n - 1)), :] = final + cs  # noqa: E203
+            start += n * (n - 1)
+            cs += n
+
+    return triple_edge_idx
 
 
 def _schmidt_3d(nearest_vec: ndarray) -> ndarray:
