@@ -381,16 +381,20 @@ class InvarianceSphereNet(BaseMPNN):
         d_st = d_st[edge_nb_idx]  # (E_NB)
         phi: Tensor = graph[GraphKeys.Phi]  # (E_NB)
         theta: Tensor = graph[GraphKeys.Theta]  # (E_NB)
+        cw = cw[edge_nb_idx]  # (E_NB)
 
         # cbf
         # phi is the angle with the first proximity edge
         cbf3 = self.cbf(d_st, phi)  # (E_NB, max_n*max_l)
+        cbf3 = cbf3 * cw.unsqueeze(-1)  # (E_NB, max_n*max_l)
         cbf3 = self.mlp_cbf3(cbf3)  # (E_NB, emb_size_cbf)
         # theta is the angle between m_st and the plane made by the first and second proximity
         cbf4 = self.cbf(d_st, theta)  # (E_NB, max_n*max_l)
+        cbf4 = cbf4 * cw.unsqueeze(-1)  # (E_NB, max_n*max_l)
         cbf4 = self.mlp_cbf4(cbf4)  # (E_NB, emb_size_cbf)
         # sbf
         sbf4 = self.sbf(d_st, phi, theta)  # (E_NB, max_n*max_l*max_l)
+        sbf4 = sbf4 * cw.unsqueeze(-1)  # (E_NB, max_n*max_l*max_l)
         sbf4 = self.mlp_sbf4(sbf4)  # (E_NB, emb_size_sbf)
 
         # ---------- EmbeddingBlock and OutputBlock----------
