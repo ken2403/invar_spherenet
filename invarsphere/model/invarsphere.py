@@ -757,8 +757,6 @@ class QuadrupletInteraction(nn.Module):
     ):
         super().__init__()
 
-        assert emb_quad % 2 == 0
-
         self.mlp_m_rbf = nn.Sequential(
             Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
