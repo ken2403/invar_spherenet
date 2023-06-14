@@ -23,19 +23,6 @@ class BaseGraphDataset(Dataset):
     def get(self, idx: int) -> Data:
         raise NotImplementedError
 
-    @classmethod
-    def load_from_pickle(cls, load_pth: str):
-        import pickle
-
-        with open(load_pth, "rb") as f:
-            return pickle.load(f)
-
-    def save(self, save_pth: str):
-        import pickle
-
-        with open(save_pth, "wb") as f:
-            pickle.dump(self, f)
-
 
 class List2GraphDataset(BaseGraphDataset):
     """Convert a list of structures or atoms into a graph dataset.
