@@ -106,9 +106,9 @@ def atoms2graphdata(
             # keep n_ind for basis edge_index
             n_ind = idx_s[-1].shape[0] - 1
 
-    edge_src = np.array(idx_s)
-    edge_dst = np.array(idx_t)
-    edge_shift = np.array(shift)
+    edge_src = np.concatenate(idx_s, axis=0)
+    edge_dst = np.concatenate(idx_t, axis=0)
+    edge_shift = np.concatenate(shift, axis=0)
     if max_n_neighbor_basis:
         rotation_matrix_arr = np.array(rm)
         basis_node_idx_arr = np.array(basis_node_idx)
