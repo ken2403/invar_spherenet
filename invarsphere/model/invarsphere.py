@@ -32,7 +32,6 @@ class InvarianceSphereNet(BaseMPNN):
         emb_size_sbf: int,
         emb_quad: int,
         emb_triplet: int,
-        n_neighbor_basis: int,
         n_blocks: int,
         n_targets: int,
         max_n: int,
@@ -55,7 +54,6 @@ class InvarianceSphereNet(BaseMPNN):
         act = activation_resolver(activation)
         wi = init_resolver(weight_init) if weight_init is not None else None
 
-        self.n_neighbor_basis = n_neighbor_basis
         self.n_blocks = n_blocks
         self.n_targets = n_targets
         self.max_n = max_n
@@ -97,7 +95,6 @@ class InvarianceSphereNet(BaseMPNN):
                     emb_size_sbf,
                     emb_quad,
                     emb_triplet,
-                    n_neighbor_basis,
                     n_before_skip=1,
                     n_after_skip=1,
                     n_after_atom_self=1,
@@ -534,7 +531,6 @@ class InteractionBlock(nn.Module):
         emb_size_sbf: int,
         emb_quad: int,
         emb_triplet: int,
-        n_neighbor_basis: int,
         n_before_skip: int,
         n_after_skip: int,
         n_after_atom_self: int,
@@ -552,7 +548,6 @@ class InteractionBlock(nn.Module):
             emb_size_cbf,
             emb_size_sbf,
             emb_quad,
-            n_neighbor_basis,
             activation,
             weight_init,
         )
@@ -561,7 +556,6 @@ class InteractionBlock(nn.Module):
             emb_size_rbf,
             emb_size_cbf,
             emb_triplet,
-            n_neighbor_basis,
             activation,
             weight_init,
         )
@@ -754,7 +748,6 @@ class QuadrupletInteraction(nn.Module):
         emb_size_cbf: int,
         emb_size_sbf: int,
         emb_quad: int,
-        n_neighbor_basis: int,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
     ):
@@ -798,7 +791,6 @@ class QuadrupletInteraction(nn.Module):
         )
 
         self.inv_sqrt_2 = 1 / (2.0**0.5)
-        self.inv_sqrt_neighbor = 1 / (n_neighbor_basis**0.5)
 
     def forward(
         self,
@@ -869,7 +861,6 @@ class TripletInteraction(nn.Module):
         emb_size_rbf: int,
         emb_size_cbf: int,
         emb_triplet: int,
-        n_neighbor_basis: int,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
     ):
@@ -905,7 +896,6 @@ class TripletInteraction(nn.Module):
         )
 
         self.inv_sqrt_2 = 1 / (2.0**0.5)
-        self.inv_sqrt_neighbor = 1 / (n_neighbor_basis**0.5)
 
     def forward(
         self,
