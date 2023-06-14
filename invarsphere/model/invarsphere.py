@@ -365,6 +365,7 @@ class InvarianceSphereNet(BaseMPNN):
         basis_edge_idx1: Tensor = graph[GraphKeys.Basis_edge_idx1]
         basis_edge_idx2: Tensor = graph[GraphKeys.Basis_edge_idx2]
         edge_nb_idx: Tensor = graph[GraphKeys.Edge_nb_idx]
+        nb_edge_idx: Tensor = graph[GraphKeys.Nb_edge_idx]
 
         # ---------- Basis layers ----------
         cw = self.cutoff_net(d_st)  # (E)
@@ -421,6 +422,7 @@ class InvarianceSphereNet(BaseMPNN):
                 basis_edge_idx1,
                 basis_edge_idx2,
                 edge_nb_idx,
+                nb_edge_idx,
             )
 
             # output
@@ -609,13 +611,14 @@ class InteractionBlock(nn.Module):
         basis_edge_idx1: Tensor,
         basis_edge_idx2: Tensor,
         edge_nb_idx: Tensor,
+        nb_edge_idx: Tensor,
     ) -> tuple[Tensor, Tensor]:
         # ---------- Geometric MP ----------
         # Initial transformation
         x_st_skip = self.mlp_st(m_st)  # (E, emb_size_edge)
 
-        x4 = self.q_mp(m_st, rbf4, cbf4, sbf4, idx_swap, basis_edge_idx1, basis_edge_idx2, edge_nb_idx)
-        x3 = self.t_mp(m_st, rbf3, cbf3, idx_swap, basis_edge_idx1, edge_nb_idx)
+        x4 = self.q_mp(m_st, rbf4, cbf4, sbf4, idx_swap, basis_edge_idx1, basis_edge_idx2, edge_nb_idx, nb_edge_idx)
+        x3 = self.t_mp(m_st, rbf3, cbf3, idx_swap, basis_edge_idx1, edge_nb_idx, nb_edge_idx)
 
         # ---------- Merge Embeddings after Quadruplet and Triplet Interaction ----------
         x = x_st_skip + x3 + x4  # (E, emb_size_edge)
@@ -807,6 +810,7 @@ class QuadrupletInteraction(nn.Module):
         basis_edge_idx1: Tensor,
         basis_edge_idx2: Tensor,
         edge_nb_idx: Tensor,
+        nb_edge_idx: Tensor,
     ) -> Tensor:
         """
         Args:
@@ -818,6 +822,7 @@ class QuadrupletInteraction(nn.Module):
             basis_edge_idx1 (Tensor): basis edge index of first base edge with (E_NB) shape.
             basis_edge_idx2 (Tensor): basis edge index of second base edge with (E_NB) shape.
             edge_nb_idx (Tensor): edge index of neighbor atom with (E_NB) shape.
+            nb_edge_idx (Tensor): neighbor edge index of atom with (E_NB) shape.
 
         Returns:
             x4 (Tensor): Qudruplet interaction embedding with (E, emb_size_edge) shape.
@@ -831,8 +836,8 @@ class QuadrupletInteraction(nn.Module):
 
         m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_quad)
         m_st_nb = m_st_nb[basis_edge_idx1] + m_st_nb[basis_edge_idx2]  # (NB, emb_quad)
-        m_st_nb = m_st_nb[edge_nb_idx]  # (E_NB, emb_quad)
         m_st_nb = m_st_nb * self.inv_sqrt_2
+        m_st_nb = m_st_nb[nb_edge_idx]  # (E_NB, emb_quad)
         m_st_cbf = m_st_nb * self.mlp_cbf(cbf)  # (E_NB, emb_quad)
         m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E_NB, emb_quad)
 
@@ -910,6 +915,7 @@ class TripletInteraction(nn.Module):
         idx_swap: Tensor,
         basis_edge_idx1: Tensor,
         edge_nb_idx: Tensor,
+        nb_edge_idx: Tensor,
     ) -> Tensor:
         """
         Args:
@@ -919,6 +925,7 @@ class TripletInteraction(nn.Module):
             idx_swap (Tensor): swap index of edge with (E) shape.
             basis_idx1 (Tensor): basis index of first proximity edge with (N, NB) shape.
             edge_nb_idx (Tensor): edge index of neighbor atom with (E_NB) shape.
+            nb_edge_idx (Tensor): neighbor edge index of (E_NB) shape.
 
         Returns:
             x3 (Tensor): Triplet interaction embedding with (E, emb_size_edge) shape.
@@ -932,7 +939,7 @@ class TripletInteraction(nn.Module):
 
         m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_triplet)
         m_st_nb = m_st_nb[basis_edge_idx1]  # (NB, emb_triplet)
-        m_st_nb = m_st_nb[edge_nb_idx]  # (E_NB, emb_triplet)
+        m_st_nb = m_st_nb[nb_edge_idx]  # (E_NB, emb_triplet)
         m_st_cbf = m_st_nb * self.mlp_cbf(cbf)  # (E_NB, emb_triplet)
         m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E_NB, emb_triplet)
 
