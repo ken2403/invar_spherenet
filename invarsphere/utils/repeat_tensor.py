@@ -49,7 +49,7 @@ def block_repeat(
     """  # noqa: E501
     if dim != 0 and dim != 1:
         raise ValueError("Only dim 0 and 1 supported")
-    col_index = torch.arange(t.size(dim))
+    col_index = torch.arange(t.size(dim), device=t.device)
     if col_index.size(0) != block_size.sum():
         raise ValueError("Block sizes do not match tensor size")
     indices = []
@@ -101,7 +101,7 @@ def block_repeat_each(
                 ]
     """  # noqa: E501
     # dim = 0 only
-    col_index = torch.arange(t.size(0))
+    col_index = torch.arange(t.size(0), device=t.device)
     indices = []
     start = 0
 
