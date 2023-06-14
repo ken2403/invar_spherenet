@@ -70,7 +70,7 @@ def atoms2graphdata(
 
         # rotation matrix
         if max_n_neighbor_basis:
-            triple_edge_idx = _get_triple_edge_idx(idx_s_i, 1)
+            triple_edge_idx = _get_triple_edge_idx(idx_s_i, i + 1)
             i1 = 0
             cnt = 0
             while cnt < max_n_neighbor_basis:
@@ -81,9 +81,8 @@ def atoms2graphdata(
                 except IndexError:
                     logging.info(f"only {cnt} neighbor_basis are found for {i}th atom in {atoms.symbols}")
                     break
-                nearest_vec = np.stack([first_vec, second_vec], axis=0)
-                # Transpose to have a coordinate component in the column direction.
-                nearest_vec = nearest_vec.T
+                # coordinate component in the column direction.
+                nearest_vec = np.stack([first_vec, second_vec], axis=1)
                 q = _schmidt_3d(nearest_vec)
                 # If two vectors are not first order independent, the q value become nan
                 if np.isnan(q).any():
@@ -101,7 +100,7 @@ def atoms2graphdata(
                 i1 += 1
 
             # keep n_ind for basis edge_index
-            n_ind = idx_s[-1].shape[0] - 1
+            n_ind += idx_s[-1].shape[0]
 
     edge_src = np.concatenate(idx_s, axis=0)
     edge_dst = np.concatenate(idx_t, axis=0)
