@@ -59,10 +59,7 @@ def atoms2graphdata(
         center_mask = edge_src == i
         dist_i = dist[center_mask]
         sorted_ind = np.argsort(dist_i)
-        if cutoff is not None:
-            dist_mask = (dist_i <= cutoff)[sorted_ind]
-        else:
-            dist_mask = np.ones_like(sorted_ind, dtype=bool)
+        dist_mask = (dist_i <= cutoff)[sorted_ind]
         # center_mask to retrieve information on central atom i
         # reorder by soreted_ind in order of distance
         # extract only the information within the cutoff radius with dist_mask
