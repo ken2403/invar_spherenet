@@ -22,7 +22,7 @@ def edge_index_inc(datalist: list[BaseData]) -> list[BaseData]:
     n_edge = 0
     for data in datalist:
         for k in [GraphKeys.Basis_edge_idx1, GraphKeys.Basis_edge_idx2, GraphKeys.Basis_edge_idx3]:
-            if data.get(k):
+            if data.get(k) is not None:
                 data[k] += n_edge
         n_edge += data.edge_index.size(1)
     return datalist
