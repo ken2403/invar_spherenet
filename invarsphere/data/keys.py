@@ -37,7 +37,7 @@ class GraphKeys:
     Theta = "theta"  # azimuthal angles of (E_NB) shape
     Phi = "phi"  # polar angles of (E_NB) shape
     Edge_nb_idx = "edge_nb_index"  # edge neighbor index of (E_NB) shape, used to aggregate E_NB->E or extend E->E_NB
-    NB_edge_idx = "nb_edge_index"  # neighbor edge index of (E_NB) shape, used to extend NB->E_NB
+    Nb_edge_idx = "nb_edge_index"  # neighbor edge index of (E_NB) shape, used to extend NB->E_NB
 
 
 KEYS = [
