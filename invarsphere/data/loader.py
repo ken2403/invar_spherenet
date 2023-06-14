@@ -1,13 +1,31 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Sequence
 
 import torch.utils.data
-from torch.utils.data.dataloader import default_collate
 from torch_geometric.data import Batch, Dataset
 from torch_geometric.data.data import BaseData
 from torch_geometric.data.datapipes import DatasetAdapter
+
+from .keys import GraphKeys
+
+
+def edge_index_inc(datalist: list[BaseData]) -> list[BaseData]:
+    """Increment edge_index in datalist.
+
+    Args:
+        datalist (list[BaseData]): list of BaseData.
+
+    Returns:
+        list[BaseData]: list of BaseData with edge_index incremented.
+    """
+    n_edge = 0
+    for data in datalist:
+        for k in [GraphKeys.Basis_edge_idx1, GraphKeys.Basis_edge_idx2, GraphKeys.Basis_edge_idx3]:
+            if data.get(k):
+                data[k] += n_edge
+        n_edge += data.edge_index.size(1)
+    return datalist
 
 
 class EdgeBasisCollater:
@@ -19,26 +37,12 @@ class EdgeBasisCollater:
         elem = batch[0]
         # custom loader for basis edge index
         if isinstance(elem, BaseData):
+            # edge_index increment
+            batch = edge_index_inc(batch)
             # node_index increment
-            data = Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
-            return data
+            return Batch.from_data_list(batch, self.follow_batch, self.exclude_keys)
 
-        # other is same as torch_geometric.loader.DataLoader
-        elif isinstance(elem, torch.Tensor):
-            return default_collate(batch)
-        elif isinstance(elem, float):
-            return torch.tensor(batch, dtype=torch.float)
-        elif isinstance(elem, int):
-            return torch.tensor(batch)
-        elif isinstance(elem, str):
-            return batch
-        elif isinstance(elem, Mapping):
-            return {key: self([data[key] for data in batch]) for key in elem}
-        elif isinstance(elem, tuple) and hasattr(elem, "_fields"):
-            return type(elem)(*(self(s) for s in zip(*batch)))
-        elif isinstance(elem, Sequence) and not isinstance(elem, str):
-            return [self(s) for s in zip(*batch)]
-
+        # other is error
         raise TypeError(f"DataLoader found invalid type: {type(elem)}")
 
 
