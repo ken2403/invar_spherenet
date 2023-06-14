@@ -9,20 +9,9 @@ from torch_geometric.data import Batch, Dataset
 from torch_geometric.data.data import BaseData
 from torch_geometric.data.datapipes import DatasetAdapter
 
-from .keys import GraphKeys
-
 
 class EdgeBasisCollater:
     def __init__(self, follow_batch: list[str] | None, exclude_keys: list[str] | None):
-        if follow_batch is None:
-            follow_batch = []
-        follow_batch += [
-            GraphKeys.Basis_edge_idx1,
-            GraphKeys.Basis_edge_idx2,
-            GraphKeys.Basis_edge_idx3,
-            GraphKeys.Edge_nb_idx,
-            GraphKeys.Nb_edge_idx,
-        ]
         self.follow_batch = follow_batch
         self.exclude_keys = exclude_keys
 
