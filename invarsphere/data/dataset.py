@@ -84,7 +84,7 @@ class List2GraphDataset(BaseGraphDataset):
                 if self.remove_batch_key is not None and k in self.remove_batch_key:
                     add_batch = False
                 set_properties(data, k, v[i], add_batch)
-            torch.save(f"{self.save_dir}/{i}.pt", data)
+            torch.save(data, f"{self.save_dir}/{i}.pt")
 
     def len(self) -> int:
         length = len(os.listdir(self.save_dir))
