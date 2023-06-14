@@ -63,9 +63,9 @@ class List2GraphDataset(BaseGraphDataset):
         self.basis_cutoff = basis_cutoff
         self.remove_batch_key = remove_batch_key
         if preprocess:
-            self.process(atoms_list, y_values)
+            self._preprocess(atoms_list, y_values)
 
-    def process(
+    def _preprocess(
         self,
         atoms_list: list[ase.Atoms],
         y_values: dict[str, list[int | float | str | ndarray | Tensor] | ndarray | Tensor],
