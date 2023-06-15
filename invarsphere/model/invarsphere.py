@@ -775,7 +775,6 @@ class QuadrupletInteraction(nn.Module):
         self.scale_sbf = ScaleFactor()
 
         self.scale_nb = ScaleFactor()
-
         self.mlp_direction = nn.Sequential(
             Dense(emb_quad, emb_size_edge, False, weight_init),
             activation,
