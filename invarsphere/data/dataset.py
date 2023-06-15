@@ -44,6 +44,7 @@ class List2GraphDataset(BaseGraphDataset):
         basis_cutoff: float = 10,
         remove_batch_key: list[str] | None = None,
         preprocess: bool = True,
+        inmemory: bool = False,
     ):
         """
         Args:
@@ -56,6 +57,7 @@ class List2GraphDataset(BaseGraphDataset):
            basis_cutoff (float): The cutoff radius for computing the neighbor basis. Defaults to `10`.
            remove_batch_key (list[str] | None, optional): List of property names that do not add dimension for batch. Defaults to `None`.
            preprocess (bool, optional): Whether to preprocess the dataset. Defaults to `True`.
+           inmemory (bool, optional): Whether to load the dataset into memory. Defaults to `False`.
         """  # noqa: E501
         super().__init__(cutoff, save_dir)
         self.subtract_center_of_mass = subtract_center_of_mass
@@ -64,6 +66,9 @@ class List2GraphDataset(BaseGraphDataset):
         self.remove_batch_key = remove_batch_key
         if preprocess:
             self._preprocess(atoms_list, y_values)
+        self.inmemory = inmemory
+        if inmemory:
+            self._data_list = [None] * self.len()
 
     def _preprocess(
         self,
@@ -93,7 +98,16 @@ class List2GraphDataset(BaseGraphDataset):
         return length
 
     def get(self, idx: int) -> Data:
-        return torch.load(f"{self.save_dir}/{idx}.pt")
+        if not self.inmemory:
+            return torch.load(f"{self.save_dir}/{idx}.pt")
+        if idx >= len(self._data_list):
+            raise IndexError("index out of range")
+        if self._data_list[idx] is None:
+            try:
+                self._data_list[idx] = torch.load(f"{self.save_dir}/{idx}.pt")
+            except FileNotFoundError:
+                raise IndexError("index out of range, please set proper index or preprocess=True")
+        return self._data_list[idx]
 
     def get_atoms(self, idx: int) -> ase.Atoms:
         return graphdata2atoms(self.get(idx))
