@@ -377,9 +377,9 @@ class InvarianceSphereNet(BaseMPNN):
 
         # --- cbf & sbf ---
         d_st = d_st[edge_nb_idx]  # (E_NB)
+        cw = cw[edge_nb_idx]  # (E_NB)
         phi: Tensor = graph[GraphKeys.Phi]  # (E_NB)
         theta: Tensor = graph[GraphKeys.Theta]  # (E_NB)
-        cw = cw[edge_nb_idx]  # (E_NB)
 
         # cbf
         # phi is the angle with the first proximity edge
