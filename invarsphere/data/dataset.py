@@ -68,7 +68,7 @@ class List2GraphDataset(BaseGraphDataset):
             self._preprocess(atoms_list, y_values)
         self.inmemory = inmemory
         if inmemory:
-            self._data_list = [None] * self.len()
+            self._data_list = [None for _ in range(self.len())]
 
     def _preprocess(
         self,
