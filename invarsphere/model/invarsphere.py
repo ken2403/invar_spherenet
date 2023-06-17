@@ -241,9 +241,15 @@ class InvarianceSphereNet(BaseMPNN):
             edge_vector_new,
         )
 
-    def _get_edge_nb_info(self, idx_s: Tensor, rot_mat: Tensor, basis_node_idx: Tensor) -> tuple[Tensor, Tensor]:
-        _, cnt_bnode = torch.unique(basis_node_idx, return_counts=True)
-        _, cnt_edge_s = torch.unique(idx_s, return_counts=True)
+    def _get_edge_nb_info(
+        self,
+        idx_s: Tensor,
+        rot_mat: Tensor,
+        basis_node_idx: Tensor,
+        n_node: int,
+    ) -> tuple[Tensor, Tensor]:
+        cnt_bnode = torch.bincount(basis_node_idx, minlength=n_node)
+        cnt_edge_s = torch.bincount(idx_s, minlength=n_node)
 
         edge_nb_idx = block_repeat(idx_s, cnt_edge_s, cnt_bnode, return_index=True)
         nb_edge_idx = block_repeat_each(rot_mat, cnt_bnode, cnt_edge_s, return_index=True)
@@ -327,7 +333,8 @@ class InvarianceSphereNet(BaseMPNN):
         # edge neighbor basis information
         rot_mat = graph[GraphKeys.Rot_mat]
         basis_node_idx = graph[GraphKeys.Basis_node_idx]
-        edge_nb_idx, nb_edge_idx = self._get_edge_nb_info(edge_index[0], rot_mat, basis_node_idx)
+        n_node = graph[GraphKeys.Pos].size(0)
+        edge_nb_idx, nb_edge_idx = self._get_edge_nb_info(edge_index[0], rot_mat, basis_node_idx, n_node)
         graph[GraphKeys.Edge_nb_idx] = edge_nb_idx
         graph[GraphKeys.Nb_edge_idx] = nb_edge_idx
 
