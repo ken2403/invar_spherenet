@@ -64,13 +64,14 @@ def atoms2graphdata(
         # center_mask to retrieve information on central atom i
         # reorder by soreted_ind in order of distance
         # extract only the information within the cutoff radius with dist_mask
-        idx_s_i = edge_src[center_mask][sorted_ind]
-        idx_s.append(idx_s_i[dist_mask])
+        idx_s_i = edge_src[center_mask][sorted_ind][dist_mask]
+        idx_s.append(idx_s_i)
         idx_t.append(edge_dst[center_mask][sorted_ind][dist_mask])
         shift.append(edge_shift[center_mask][sorted_ind][dist_mask])
 
         # rotation matrix
         if max_n_neighbor_basis:
+            # search neighbor basis only in cutoff radius
             triple_edge_idx = _get_triple_edge_idx(idx_s_i[:check_index], i + 1)
             i1 = 0
             cnt = 0
