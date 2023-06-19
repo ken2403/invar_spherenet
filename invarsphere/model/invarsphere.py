@@ -294,29 +294,29 @@ class InvarianceSphereNet(BaseMPNN):
 
         # modify edge_info
         edge_index: Tensor = graph[GraphKeys.Edge_idx]
-        cell_offsets: Tensor = graph[GraphKeys.Edge_shift]
+        # cell_offsets: Tensor = graph[GraphKeys.Edge_shift]
         neighbors: Tensor = graph[GraphKeys.Neighbors]
-        d_st: Tensor = graph[GraphKeys.Edge_dist_st]
+        # d_st: Tensor = graph[GraphKeys.Edge_dist_st]
         v_st: Tensor = graph[GraphKeys.Edge_vec_st]
-        (
-            edge_index,
-            cell_offsets,
-            neighbors,
-            d_st,
-            v_st,
-        ) = self._select_edges(edge_index, cell_offsets, neighbors, d_st, v_st, self.cutoff)
-        (
-            edge_index,
-            cell_offsets,
-            neighbors,
-            d_st,
-            v_st,
-        ) = self._reorder_symmetric_edges(edge_index, cell_offsets, neighbors, d_st, v_st)
-        graph[GraphKeys.Edge_idx] = edge_index
-        graph[GraphKeys.Edge_shift] = cell_offsets
-        graph[GraphKeys.Neighbors] = neighbors
-        graph[GraphKeys.Edge_dist_st] = d_st
-        graph[GraphKeys.Edge_vec_st] = v_st
+        # (
+        #     edge_index,
+        #     cell_offsets,
+        #     neighbors,
+        #     d_st,
+        #     v_st,
+        # ) = self._select_edges(edge_index, cell_offsets, neighbors, d_st, v_st, self.cutoff)
+        # (
+        #     edge_index,
+        #     cell_offsets,
+        #     neighbors,
+        #     d_st,
+        #     v_st,
+        # ) = self._reorder_symmetric_edges(edge_index, cell_offsets, neighbors, d_st, v_st)
+        # graph[GraphKeys.Edge_idx] = edge_index
+        # graph[GraphKeys.Edge_shift] = cell_offsets
+        # graph[GraphKeys.Neighbors] = neighbors
+        # graph[GraphKeys.Edge_dist_st] = d_st
+        # graph[GraphKeys.Edge_vec_st] = v_st
 
         # Indices for swapping c->a and a->c (for symmetric MP)
         block_sizes = neighbors // 2
