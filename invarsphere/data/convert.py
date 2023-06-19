@@ -47,7 +47,7 @@ def atoms2graphdata(
     idx_t = []
     shift = []
     if max_n_neighbor_basis:
-        # check_index = int(max_n_neighbor_basis**0.5 + 1)
+        check_index = int(max_n_neighbor_basis**0.5 + 1)
         rm = []
         basis_node_idx = []
         basis_edge_idx1 = []
@@ -72,8 +72,7 @@ def atoms2graphdata(
         # rotation matrix
         if max_n_neighbor_basis:
             # search neighbor basis only in cutoff radius
-            # triple_edge_idx = _get_triple_edge_idx(idx_s_i[:check_index], i + 1)
-            triple_edge_idx = _get_triple_edge_idx(idx_s_i, i + 1)
+            triple_edge_idx = _get_triple_edge_idx(idx_s_i[:check_index], i + 1)
             i1 = 0
             cnt = 0
             while cnt < max_n_neighbor_basis:
