@@ -81,7 +81,7 @@ def atoms2graphdata(
                     first_vec = edge_vec[center_mask][sorted_ind][triple_edge_idx[i1][0]]
                     second_vec = edge_vec[center_mask][sorted_ind][triple_edge_idx[i1][1]]
                 except IndexError:
-                    logging.warning(f"only {cnt} neighbor_basis are found for {i}th atom in {atoms.symbols}")
+                    logging.info(f"only {cnt} neighbor_basis are found for {i}th atom in {atoms.symbols}")
                     break
                 # coordinate component in the column direction.
                 nearest_vec = np.stack([first_vec, second_vec], axis=1)
