@@ -166,6 +166,8 @@ def repeat_blocks(
             repeats = torch.masked_select(repeats, sizes_nonzero)
         if isinstance(repeat_inc, torch.Tensor):
             repeat_inc = torch.masked_select(repeat_inc, sizes_nonzero)
+        if isinstance(block_inc, torch.Tensor):
+            block_inc = torch.masked_select(block_inc, sizes_nonzero)
 
     if isinstance(repeats, torch.Tensor):
         assert all(repeats >= 0)
