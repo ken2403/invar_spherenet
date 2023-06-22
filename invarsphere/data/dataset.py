@@ -178,7 +178,7 @@ class Files2GraphDataset(BaseGraphDataset):
                 add_batch = True
                 if self.remove_batch_key is not None and k in self.remove_batch_key:
                     add_batch = False
-                set_properties(data, k, v[i], add_batch)
+                set_properties(data, k, v, add_batch)
             torch.save(data, f"{self.save_dir}/{i}.pt")
 
     def len(self) -> int:
