@@ -14,10 +14,15 @@ from .convert import atoms2graphdata, graphdata2atoms, set_properties
 
 
 class BaseGraphDataset(Dataset):
-    def __init__(self, cutoff: float, save_dir: str):
+    def __init__(self, cutoff: float, save_dir: str | pathlib.Path):
         super().__init__()
         self.cutoff = cutoff
-        self.save_dir = save_dir
+        if isinstance(save_dir, str):
+            self.save_dir = pathlib.Path(save_dir)
+        else:
+            self.save_dir = save_dir
+        if not self.save_dir.exists():
+            self.save_dir.mkdir(exist_ok=False)
 
     def len(self) -> int:
         raise NotImplementedError
@@ -40,7 +45,7 @@ class List2GraphDataset(BaseGraphDataset):
         atoms_list: list[ase.Atoms],
         y_values: dict[str, list[int | float | str | ndarray | Tensor] | ndarray | Tensor],
         cutoff: float,
-        save_dir: str,
+        save_dir: str | pathlib.Path,
         subtract_center_of_mass: bool = False,
         max_n_neighbor_basis: int = 4,
         basis_cutoff: float = 10,
@@ -53,7 +58,7 @@ class List2GraphDataset(BaseGraphDataset):
            atoms_list (list[ase.Atoms]): list of ase.Atoms object
            y_values (dict[str, list[int | float | str | ndarray | Tensor] | ndarray | Tensor]): dict of physical properties. The key is the name of the property, and the value is the corresponding value of the property.
            cutoff (float): the cutoff radius for computing the neighbor list
-           save_dir (str): the directory to save the dataset
+           save_dir (str | pathlib.Path): the directory to save the dataset
            subtract_center_of_mass (bool, optional): Whether to subtract the center of mass from the cartesian coordinates. Defaults to `False`.
            max_n_neighbor_basis (int): The maximum number of neighbors to be considered for each atom. Defaults to `4`.
            basis_cutoff (float): The cutoff radius for computing the neighbor basis. Defaults to `10`.
@@ -128,7 +133,7 @@ class Files2GraphDataset(BaseGraphDataset):
         self,
         atoms_directory: str | pathlib.Path,
         cutoff: float,
-        save_dir: str,
+        save_dir: str | pathlib.Path,
         subtract_center_of_mass: bool = False,
         max_n_neighbor_basis: int = 4,
         basis_cutoff: float = 10,
@@ -140,7 +145,7 @@ class Files2GraphDataset(BaseGraphDataset):
         Args:
            atoms_list (list[ase.Atoms]): list of ase.Atoms object
            cutoff (float): the cutoff radius for computing the neighbor list
-           save_dir (str): the directory to save the dataset
+           save_dir (str | pathlib.Path): the directory to save the dataset
            subtract_center_of_mass (bool, optional): Whether to subtract the center of mass from the cartesian coordinates. Defaults to `False`.
            max_n_neighbor_basis (int): The maximum number of neighbors to be considered for each atom. Defaults to `4`.
            basis_cutoff (float): The cutoff radius for computing the neighbor basis. Defaults to `10`.
