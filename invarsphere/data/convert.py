@@ -81,7 +81,7 @@ def atoms2graphdata(
                     first_vec = edge_vec[center_mask][sorted_ind][triple_edge_idx[i1][0]]
                     second_vec = edge_vec[center_mask][sorted_ind][triple_edge_idx[i1][1]]
                 except IndexError:
-                    logging.info(f"only {cnt} neighbor_basis are found for {i}th atom in {atoms.symbols}")
+                    logging.warning(f"only {cnt} neighbor_basis are found for {i}th atom in {atoms.symbols}")
                     break
                 # coordinate component in the column direction.
                 nearest_vec = np.stack([first_vec, second_vec], axis=1)
@@ -104,9 +104,16 @@ def atoms2graphdata(
             # keep n_ind for basis edge_index
             n_ind += idx_s[-1].shape[0]
 
-    edge_src = np.concatenate(idx_s, axis=0)
-    edge_dst = np.concatenate(idx_t, axis=0)
-    edge_shift = np.concatenate(shift, axis=0)
+    if len(idx_s) > 0:
+        edge_src = np.concatenate(idx_s, axis=0)
+        edge_dst = np.concatenate(idx_t, axis=0)
+        edge_shift = np.concatenate(shift, axis=0)
+    else:
+        logging.warning(f"no neighbor is found in {atoms.symbols}")
+        edge_src = np.array([], dtype=np.int64)
+        edge_dst = np.array([], dtype=np.int64)
+        edge_shift = np.array([], dtype=np.float32)
+
     if max_n_neighbor_basis:
         rotation_matrix_arr = np.array(rm)
         basis_node_idx_arr = np.array(basis_node_idx)
