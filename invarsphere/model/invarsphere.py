@@ -326,7 +326,7 @@ class InvarianceSphereNet(BaseMPNN):
         block_sizes = neighbors // 2
         idx_swap = repeat_blocks(
             block_sizes,
-            repeats=block_sizes.new_ones(block_sizes.size(0) * 2, dtype=torch.long),
+            repeats=2,
             continuous_indexing=False,
             start_idx=block_sizes[0],
             block_inc=block_sizes[:-1] + block_sizes[1:],
