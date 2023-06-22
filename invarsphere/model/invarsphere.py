@@ -66,7 +66,7 @@ class InvarianceSphereNet(BaseMPNN):
         self.align_initial_weight = align_initial_weight
 
         # basis layers
-        self.rbf = SphericalBesselFunction(max_n, max_l, cutoff, rbf_smooth)
+        self.rbf = SphericalBesselFunction(max_n, 1, cutoff, rbf_smooth)
         self.cbf = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, use_phi=False)
         self.sbf = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, use_phi=True)
         cutoff_kwargs["cutoff"] = cutoff
