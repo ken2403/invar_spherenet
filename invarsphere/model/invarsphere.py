@@ -30,7 +30,7 @@ class InvarianceSphereNet(BaseMPNN):
         emb_size_rbf: int,
         emb_size_cbf: int,
         emb_size_sbf: int,
-        emb_quad: int,
+        emb_quad: int | None,
         emb_triplet: int,
         n_blocks: int,
         n_targets: int,
@@ -427,8 +427,8 @@ class InvarianceSphereNet(BaseMPNN):
                 m_st,
                 rbf_h,
                 rbf3,
-                rbf4,
                 cbf3,
+                rbf4,
                 cbf4,
                 sbf4,
                 idx_s,
@@ -547,7 +547,7 @@ class InteractionBlock(nn.Module):
         emb_size_rbf: int,
         emb_size_cbf: int,
         emb_size_sbf: int,
-        emb_quad: int,
+        emb_quad: int | None,
         emb_triplet: int,
         n_before_skip: int,
         n_after_skip: int,
@@ -563,6 +563,7 @@ class InteractionBlock(nn.Module):
         # ---------- Geometric MP ----------
         self.mlp_st = Dense(emb_size_edge, emb_size_edge, False, weight_init=weight_init)
         if not triplets_only:
+            assert emb_quad is not None
             self.q_mp = QuadrupletInteraction(
                 emb_size_edge,
                 emb_size_rbf,
