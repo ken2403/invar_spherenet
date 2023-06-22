@@ -77,11 +77,11 @@ class InvarianceSphereNet(BaseMPNN):
         # shared layers
         self.mlp_rbf_h = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
         self.mlp_rbf_out = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
-        self.mlp_rbf3 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
+        # self.mlp_rbf3 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
         self.mlp_cbf3 = Dense(max_n * max_l, emb_size_cbf, bias=False, weight_init=wi)
         if not triplets_only:
-            self.mlp_rbf4 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
-            self.mlp_cbf4 = Dense(max_n * max_l, emb_size_cbf, bias=False, weight_init=wi)
+            # self.mlp_rbf4 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
+            # self.mlp_cbf4 = Dense(max_n * max_l, emb_size_cbf, bias=False, weight_init=wi)
             self.mlp_sbf4 = Dense(max_n * max_l * max_l, emb_size_sbf, bias=False, weight_init=wi)
 
         # embedding block
@@ -381,9 +381,11 @@ class InvarianceSphereNet(BaseMPNN):
         rbf = self.rbf(d_st)
         rbf = rbf * cw.unsqueeze(-1)  # (E, max_n)
 
-        rbf3 = self.mlp_rbf3(rbf)  # (E, emb_size_rbf)
+        # rbf3 = self.mlp_rbf3(rbf)  # (E, emb_size_rbf)
+        rbf3 = None
         if not self.triplets_only:
-            rbf4 = self.mlp_rbf4(rbf)  # (E, emb_size_rbf)
+            # rbf4 = self.mlp_rbf4(rbf)  # (E, emb_size_rbf)
+            rbf4 = None
         else:
             rbf4 = None
         rbf_h = self.mlp_rbf_h(rbf)  # (E, emb_size_rbf)
@@ -402,9 +404,10 @@ class InvarianceSphereNet(BaseMPNN):
         cbf3 = self.mlp_cbf3(cbf3)  # (E_NB, emb_size_cbf)
         if not self.triplets_only:
             # theta is the angle between m_st and the plane made by the first and second proximity
-            cbf4 = self.cbf(d_st, theta)  # (E_NB, max_n*max_l)
-            cbf4 = cbf4 * cw.unsqueeze(-1)  # (E_NB, max_n*max_l)
-            cbf4 = self.mlp_cbf4(cbf4)  # (E_NB, emb_size_cbf)
+            # cbf4 = self.cbf(d_st, theta)  # (E_NB, max_n*max_l)
+            # cbf4 = cbf4 * cw.unsqueeze(-1)  # (E_NB, max_n*max_l)
+            # cbf4 = self.mlp_cbf4(cbf4)  # (E_NB, emb_size_cbf)
+            cbf4 = None
             # sbf
             sbf4 = self.sbf(d_st, phi, theta)  # (E_NB, max_n*max_l*max_l)
             sbf4 = sbf4 * cw.unsqueeze(-1)  # (E_NB, max_n*max_l*max_l)
@@ -780,22 +783,22 @@ class QuadrupletInteraction(nn.Module):
     ):
         super().__init__()
 
-        self.mlp_m_rbf = nn.Sequential(
-            Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
-            activation,
-        )
-        self.mlp_rbf = Dense(emb_size_rbf, emb_size_edge, bias=False, weight_init=weight_init)
-        self.scale_rbf = ScaleFactor()
+        # self.mlp_m_rbf = nn.Sequential(
+        #     Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
+        #     activation,
+        # )
+        # self.mlp_rbf = Dense(emb_size_rbf, emb_size_edge, bias=False, weight_init=weight_init)
+        # self.scale_rbf = ScaleFactor()
 
-        self.mlp_m_cbf = nn.Sequential(
-            Dense(emb_size_edge, emb_quad, bias=False, weight_init=weight_init),
-            activation,
-        )
-        self.mlp_cbf = Dense(emb_size_cbf, emb_quad, bias=False, weight_init=weight_init)
-        self.scale_cbf = ScaleFactor()
+        # self.mlp_m_cbf = nn.Sequential(
+        #     Dense(emb_size_edge, emb_quad, bias=False, weight_init=weight_init),
+        #     activation,
+        # )
+        # self.mlp_cbf = Dense(emb_size_cbf, emb_quad, bias=False, weight_init=weight_init)
+        # self.scale_cbf = ScaleFactor()
 
         self.mlp_m_sbf = nn.Sequential(
-            Dense(emb_quad, emb_quad, bias=False, weight_init=weight_init),
+            Dense(emb_size_edge, emb_quad // 2, bias=False, weight_init=weight_init),
             activation,
         )
         self.mlp_sbf = Dense(emb_size_sbf, emb_quad, bias=False, weight_init=weight_init)
@@ -848,18 +851,23 @@ class QuadrupletInteraction(nn.Module):
         E = m_st.size(0)
 
         # ---------- Geometric MP ----------
-        m_st = self.mlp_m_rbf(m_st)  # (E, emb_size_edge)
-        m_st_rbf = m_st * self.mlp_rbf(rbf)
-        m_st = self.scale_rbf(m_st_rbf, ref=m_st)  # (E, emb_size_edge)
+        # m_st = self.mlp_m_rbf(m_st)  # (E, emb_size_edge)
+        # m_st_rbf = m_st * self.mlp_rbf(rbf)
+        # m_st = self.scale_rbf(m_st_rbf, ref=m_st)  # (E, emb_size_edge)
 
-        m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_quad)
-        m_st_nb = m_st_nb[basis_edge_idx1] + m_st_nb[basis_edge_idx2]  # (NB, emb_quad)
-        m_st_nb = m_st_nb * self.inv_sqrt_2
+        # m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_quad)
+        # m_st_nb = m_st_nb[basis_edge_idx1] + m_st_nb[basis_edge_idx2]  # (NB, emb_quad)
+        # m_st_nb = m_st_nb * self.inv_sqrt_2
+        # m_st_nb = m_st_nb[nb_edge_idx]  # (E_NB, emb_quad)
+        # m_st_cbf = m_st_nb * self.mlp_cbf(cbf)  # (E_NB, emb_quad)
+        # m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E_NB, emb_quad)
+
+        m_st_nb = self.mlp_m_sbf(m_st)  # (E_NB, emb_quad)
+
+        m_st_nb = torch.cat([m_st_nb[basis_edge_idx1], m_st_nb[basis_edge_idx2]], dim=-1)  # (NB, emb_quad)
+        # m_st_nb = m_st_nb * self.inv_sqrt_2
         m_st_nb = m_st_nb[nb_edge_idx]  # (E_NB, emb_quad)
-        m_st_cbf = m_st_nb * self.mlp_cbf(cbf)  # (E_NB, emb_quad)
-        m_st_nb = self.scale_cbf(m_st_cbf, ref=m_st_nb)  # (E_NB, emb_quad)
 
-        m_st_nb = self.mlp_m_sbf(m_st_nb)  # (E_NB, emb_quad)
         m_st_sbf = m_st_nb * self.mlp_sbf(sbf)  # (E_NB, emb_quad)
         m_st_nb = self.scale_sbf(m_st_sbf, ref=m_st_nb)  # (E_NB, emb_quad)
 
@@ -892,12 +900,12 @@ class TripletInteraction(nn.Module):
     ):
         super().__init__()
 
-        self.mlp_m_rbf = nn.Sequential(
-            Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
-            activation,
-        )
-        self.mlp_rbf = Dense(emb_size_rbf, emb_size_edge, bias=False, weight_init=weight_init)
-        self.scale_rbf = ScaleFactor()
+        # self.mlp_m_rbf = nn.Sequential(
+        #     Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
+        #     activation,
+        # )
+        # self.mlp_rbf = Dense(emb_size_rbf, emb_size_edge, bias=False, weight_init=weight_init)
+        # self.scale_rbf = ScaleFactor()
 
         self.mlp_m_cbf = nn.Sequential(
             Dense(emb_size_edge, emb_triplet, bias=False, weight_init=weight_init),
@@ -949,9 +957,9 @@ class TripletInteraction(nn.Module):
         E = m_st.size(0)
 
         # ---------- Geometric MP ----------
-        m_st = self.mlp_m_rbf(m_st)
-        m_st_rbf = m_st * self.mlp_rbf(rbf)
-        m_st = self.scale_rbf(m_st_rbf, ref=m_st)  # (E, emb_size_edge)
+        # m_st = self.mlp_m_rbf(m_st)
+        # m_st_rbf = m_st * self.mlp_rbf(rbf)
+        # m_st = self.scale_rbf(m_st_rbf, ref=m_st)  # (E, emb_size_edge)
 
         m_st_nb: Tensor = self.mlp_m_cbf(m_st)  # (E, emb_triplet)
         m_st_nb = m_st_nb[basis_edge_idx1]  # (NB, emb_triplet)
