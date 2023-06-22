@@ -36,6 +36,7 @@ class InvarianceSphereNet(BaseMPNN):
         n_targets: int,
         max_n: int,
         max_l: int,
+        triplets_only: bool = True,
         rbf_smooth: bool = True,
         cutoff: float = 6.0,
         cutoff_net: str | type[BaseCutoff] = "envelope",
@@ -58,6 +59,7 @@ class InvarianceSphereNet(BaseMPNN):
         self.n_targets = n_targets
         self.max_n = max_n
         self.max_l = max_l
+        self.triplets_only = triplets_only
         self.rbf_smooth = rbf_smooth
         self.cutoff = cutoff
         self.extensive = extensive
@@ -76,10 +78,11 @@ class InvarianceSphereNet(BaseMPNN):
         self.mlp_rbf_h = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
         self.mlp_rbf_out = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
         self.mlp_rbf3 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
-        self.mlp_rbf4 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
         self.mlp_cbf3 = Dense(max_n * max_l, emb_size_cbf, bias=False, weight_init=wi)
-        self.mlp_cbf4 = Dense(max_n * max_l, emb_size_cbf, bias=False, weight_init=wi)
-        self.mlp_sbf4 = Dense(max_n * max_l * max_l, emb_size_sbf, bias=False, weight_init=wi)
+        if not triplets_only:
+            self.mlp_rbf4 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
+            self.mlp_cbf4 = Dense(max_n * max_l, emb_size_cbf, bias=False, weight_init=wi)
+            self.mlp_sbf4 = Dense(max_n * max_l * max_l, emb_size_sbf, bias=False, weight_init=wi)
 
         # embedding block
         self.emb_block = EmbeddingBlock(emb_size_atom, max_n, emb_size_edge, max_z, True, act, wi)
@@ -99,6 +102,7 @@ class InvarianceSphereNet(BaseMPNN):
                     n_after_skip=1,
                     n_after_atom_self=1,
                     n_atom_emb=1,
+                    triplets_only=triplets_only,
                     activation=act,
                     weight_init=wi,
                 )
@@ -378,7 +382,10 @@ class InvarianceSphereNet(BaseMPNN):
         rbf = rbf * cw.unsqueeze(-1)  # (E, max_n)
 
         rbf3 = self.mlp_rbf3(rbf)  # (E, emb_size_rbf)
-        rbf4 = self.mlp_rbf4(rbf)  # (E, emb_size_rbf)
+        if not self.triplets_only:
+            rbf4 = self.mlp_rbf4(rbf)  # (E, emb_size_rbf)
+        else:
+            rbf4 = None
         rbf_h = self.mlp_rbf_h(rbf)  # (E, emb_size_rbf)
         rbf_out = self.mlp_rbf_out(rbf)  # (E, emb_size_rbf)
 
@@ -393,14 +400,18 @@ class InvarianceSphereNet(BaseMPNN):
         cbf3 = self.cbf(d_st, phi)  # (E_NB, max_n*max_l)
         cbf3 = cbf3 * cw.unsqueeze(-1)  # (E_NB, max_n*max_l)
         cbf3 = self.mlp_cbf3(cbf3)  # (E_NB, emb_size_cbf)
-        # theta is the angle between m_st and the plane made by the first and second proximity
-        cbf4 = self.cbf(d_st, theta)  # (E_NB, max_n*max_l)
-        cbf4 = cbf4 * cw.unsqueeze(-1)  # (E_NB, max_n*max_l)
-        cbf4 = self.mlp_cbf4(cbf4)  # (E_NB, emb_size_cbf)
-        # sbf
-        sbf4 = self.sbf(d_st, phi, theta)  # (E_NB, max_n*max_l*max_l)
-        sbf4 = sbf4 * cw.unsqueeze(-1)  # (E_NB, max_n*max_l*max_l)
-        sbf4 = self.mlp_sbf4(sbf4)  # (E_NB, emb_size_sbf)
+        if not self.triplets_only:
+            # theta is the angle between m_st and the plane made by the first and second proximity
+            cbf4 = self.cbf(d_st, theta)  # (E_NB, max_n*max_l)
+            cbf4 = cbf4 * cw.unsqueeze(-1)  # (E_NB, max_n*max_l)
+            cbf4 = self.mlp_cbf4(cbf4)  # (E_NB, emb_size_cbf)
+            # sbf
+            sbf4 = self.sbf(d_st, phi, theta)  # (E_NB, max_n*max_l*max_l)
+            sbf4 = sbf4 * cw.unsqueeze(-1)  # (E_NB, max_n*max_l*max_l)
+            sbf4 = self.mlp_sbf4(sbf4)  # (E_NB, emb_size_sbf)
+        else:
+            cbf4 = None
+            sbf4 = None
 
         # ---------- EmbeddingBlock and OutputBlock----------
         # (N, emb_size) & (E, emb_size)
@@ -542,22 +553,25 @@ class InteractionBlock(nn.Module):
         n_after_skip: int,
         n_after_atom_self: int,
         n_atom_emb: int,
+        triplets_only: bool,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
     ):
         super().__init__()
+        self.triplets_only = triplets_only
 
         # ---------- Geometric MP ----------
         self.mlp_st = Dense(emb_size_edge, emb_size_edge, False, weight_init=weight_init)
-        self.q_mp = QuadrupletInteraction(
-            emb_size_edge,
-            emb_size_rbf,
-            emb_size_cbf,
-            emb_size_sbf,
-            emb_quad,
-            activation,
-            weight_init,
-        )
+        if not triplets_only:
+            self.q_mp = QuadrupletInteraction(
+                emb_size_edge,
+                emb_size_rbf,
+                emb_size_cbf,
+                emb_size_sbf,
+                emb_quad,
+                activation,
+                weight_init,
+            )
         self.t_mp = TripletInteraction(
             emb_size_edge,
             emb_size_rbf,
@@ -602,15 +616,15 @@ class InteractionBlock(nn.Module):
         m_st: Tensor,
         rbf_h: Tensor,
         rbf3: Tensor,
-        rbf4: Tensor,
         cbf3: Tensor,
-        cbf4: Tensor,
-        sbf4: Tensor,
+        rbf4: Tensor | None,
+        cbf4: Tensor | None,
+        sbf4: Tensor | None,
         idx_s: Tensor,
         idx_t: Tensor,
         idx_swap: Tensor,
         basis_edge_idx1: Tensor,
-        basis_edge_idx2: Tensor,
+        basis_edge_idx2: Tensor | None,
         edge_nb_idx: Tensor,
         nb_edge_idx: Tensor,
     ) -> tuple[Tensor, Tensor]:
@@ -618,12 +632,17 @@ class InteractionBlock(nn.Module):
         # Initial transformation
         x_st_skip = self.mlp_st(m_st)  # (E, emb_size_edge)
 
-        x4 = self.q_mp(m_st, rbf4, cbf4, sbf4, idx_swap, basis_edge_idx1, basis_edge_idx2, edge_nb_idx, nb_edge_idx)
+        if not self.triplets_only:
+            x4 = self.q_mp(m_st, rbf4, cbf4, sbf4, idx_swap, basis_edge_idx1, basis_edge_idx2, edge_nb_idx, nb_edge_idx)
         x3 = self.t_mp(m_st, rbf3, cbf3, idx_swap, basis_edge_idx1, edge_nb_idx, nb_edge_idx)
 
         # ---------- Merge Embeddings after Quadruplet and Triplet Interaction ----------
-        x = x_st_skip + x3 + x4  # (E, emb_size_edge)
-        x = x * self.inv_sqrt_3
+        if not self.triplets_only:
+            x = x_st_skip + x3 + x4  # (E, emb_size_edge)
+            x = x * self.inv_sqrt_3
+        else:
+            x = x_st_skip + x3
+            x = x * self.inv_sqrt_2
 
         # ---------- Update Edge Embeddings ----------
         for layer in self.residual_before_skip:
