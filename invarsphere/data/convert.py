@@ -1,25 +1,121 @@
 from __future__ import annotations
 
+import abc
 import logging
+import pathlib
+import pickle
 
 import ase
 import numpy as np
 import torch
 from ase.data import atomic_masses
 from ase.neighborlist import neighbor_list
-from numpy import ndarray
-from torch import Tensor
 from torch_geometric.data import Data
 
 from .keys import KEYS, GraphKeys
+from .utils import (
+    full_linked_graph,
+    get_triple_edge_idx,
+    nearest_vec2rot_mat_3d,
+    set_properties,
+)
+
+
+class BaseDataConverter(abc.ABC):
+    def __init__(self, cutoff: float, save_dir: str | pathlib.Path):
+        self.cutoff = cutoff
+        if isinstance(save_dir, str):
+            self.save_dir = pathlib.Path(save_dir)
+        else:
+            self.save_dir = save_dir
+        if not self.save_dir.exists():
+            self.save_dir.mkdir(exist_ok=False)
+
+    @abc.abstractmethod
+    def convert(self, atoms_info):
+        raise NotImplementedError
+
+
+class ListDataConverter(BaseDataConverter):
+    def __init__(
+        self,
+        cutoff: float,
+        save_dir: str | pathlib.Path,
+        subtract_center_of_mass: bool = False,
+        max_neighbors: int = 32,
+        max_n_neighbor_basis: int = 4,
+        remove_batch_key: list[str] | None = None,
+    ):
+        super().__init__(cutoff, save_dir)
+
+        self.subtract_center_of_mass = subtract_center_of_mass
+        self.max_neighbors = max_neighbors
+        self.max_n_neighbor_basis = max_n_neighbor_basis
+        self.remove_batch_key = remove_batch_key
+
+    def convert(self, atoms_list: list[ase.Atoms]):
+        for i, at in enumerate(atoms_list):
+            assert isinstance(at, ase.Atoms)
+            data = atoms2graphdata(
+                at,
+                self.subtract_center_of_mass,
+                self.cutoff,
+                self.max_neighbors,
+                self.max_n_neighbor_basis,
+            )
+            for k, v in at.info.items():
+                add_batch = True
+                if self.remove_batch_key is not None and k in self.remove_batch_key:
+                    add_batch = False
+                set_properties(data, k, v[i], add_batch)
+            torch.save(data, f"{self.save_dir}/{i}.pt")
+
+
+class FilesDataConverter(BaseDataConverter):
+    def __init__(
+        self,
+        cutoff: float,
+        save_dir: str | pathlib.Path,
+        subtract_center_of_mass: bool = False,
+        max_neighbors: int = 32,
+        max_n_neighbor_basis: int = 4,
+        remove_batch_key: list[str] | None = None,
+    ):
+        super().__init__(cutoff, save_dir)
+
+        self.subtract_center_of_mass = subtract_center_of_mass
+        self.max_neighbors = max_neighbors
+        self.max_n_neighbor_basis = max_n_neighbor_basis
+        self.remove_batch_key = remove_batch_key
+
+    def convert(self, atoms_directory: str | pathlib.Path):
+        if isinstance(atoms_directory, str):
+            atoms_directory = pathlib.Path(atoms_directory)
+        for i, at_file in enumerate(atoms_directory.iterdir()):
+            with open(at_file, "rb") as f:
+                at = pickle.load(f)
+            assert isinstance(at, ase.Atoms)
+            data = atoms2graphdata(
+                at,
+                self.subtract_center_of_mass,
+                self.cutoff,
+                self.max_neighbors,
+                self.max_n_neighbor_basis,
+            )
+            for k, v in at.info.items():
+                add_batch = True
+                if self.remove_batch_key is not None and k in self.remove_batch_key:
+                    add_batch = False
+                set_properties(data, k, v, add_batch)
+            torch.save(data, f"{self.save_dir}/{i}.pt")
 
 
 def atoms2graphdata(
     atoms: ase.Atoms,
     subtract_center_of_mass: bool,
     cutoff: float,
+    max_neighbors: int,
     max_n_neighbor_basis: int,
-    basis_cutoff: float,
 ) -> Data:
     """Convert one `ase.Atoms` object to `torch_geometric.data.Data` with edge
     index information include pbc.
@@ -39,7 +135,7 @@ def atoms2graphdata(
     edge_src, edge_dst, dist, edge_vec, edge_shift = neighbor_list(
         "ijdDS",
         a=atoms,
-        cutoff=basis_cutoff,
+        cutoff=cutoff,
         self_interaction=False,
     )
 
@@ -64,28 +160,29 @@ def atoms2graphdata(
         # center_mask to retrieve information on central atom i
         # reorder by soreted_ind in order of distance
         # extract only the information within the cutoff radius with dist_mask
-        idx_s_i = edge_src[center_mask][sorted_ind][dist_mask]
+        # indexing to take out only the max_neighbor neighborhoods
+        idx_s_i = edge_src[center_mask][sorted_ind][dist_mask][:max_neighbors]
         idx_s.append(idx_s_i)
-        idx_t.append(edge_dst[center_mask][sorted_ind][dist_mask])
-        shift.append(edge_shift[center_mask][sorted_ind][dist_mask])
+        idx_t.append(edge_dst[center_mask][sorted_ind][dist_mask][:max_neighbors])
+        shift.append(edge_shift[center_mask][sorted_ind][dist_mask][:max_neighbors])
 
         # rotation matrix
         if max_n_neighbor_basis:
             # search neighbor basis only in cutoff radius
-            triple_edge_idx = _get_triple_edge_idx(idx_s_i[:check_index], i + 1)
+            triple_edge_idx = get_triple_edge_idx(idx_s_i[:check_index], i + 1)
             i1 = 0
             cnt = 0
             while cnt < max_n_neighbor_basis:
                 # nearest_vec has a coordinate component in the row direction
                 try:
-                    first_vec = edge_vec[center_mask][sorted_ind][triple_edge_idx[i1][0]]
-                    second_vec = edge_vec[center_mask][sorted_ind][triple_edge_idx[i1][1]]
+                    first_vec = edge_vec[center_mask][sorted_ind][dist_mask][triple_edge_idx[i1][0]]
+                    second_vec = edge_vec[center_mask][sorted_ind][dist_mask][triple_edge_idx[i1][1]]
                 except IndexError:
                     logging.info(f"only {cnt} neighbor_basis are found for {i}th atom in {atoms.symbols}")
                     break
                 # coordinate component in the column direction.
                 nearest_vec = np.stack([first_vec, second_vec], axis=1)
-                q = _schmidt_3d(nearest_vec)
+                q = nearest_vec2rot_mat_3d(nearest_vec)
                 # If two vectors are not first order independent, the q value become nan
                 if np.isnan(q).any():
                     i1 += 1
@@ -109,10 +206,9 @@ def atoms2graphdata(
         edge_dst = np.concatenate(idx_t, axis=0)
         edge_shift = np.concatenate(shift, axis=0)
     else:
-        logging.warning(f"no neighbor is found in {atoms.symbols}")
-        edge_src = np.array([], dtype=np.int64)
-        edge_dst = np.array([], dtype=np.int64)
-        edge_shift = np.array([], dtype=np.float32)
+        logging.warning(f"no neighbor is found in {atoms.symbols}. Make fully linked graph.")
+        edge, edge_shift = full_linked_graph(atoms.numbers.shape[0])
+        edge_src, edge_dst = edge[0], edge[1]
 
     if max_n_neighbor_basis:
         rotation_matrix_arr = np.array(rm)
@@ -142,107 +238,6 @@ def atoms2graphdata(
     data[GraphKeys.Neighbors] = torch.tensor([edge_dst.shape[0]])
 
     return data
-
-
-def _get_triple_edge_idx(edge_src: ndarray, n_nodes: int) -> ndarray:
-    first_col = edge_src.reshape(-1, 1)
-    all_indices = np.arange(n_nodes).reshape(1, -1)
-    n_bond_per_atom = np.count_nonzero(first_col == all_indices, axis=0)
-    n_triple_i = n_bond_per_atom * (n_bond_per_atom - 1)
-    n_triple = np.sum(n_triple_i)
-    triple_edge_idx = np.empty((n_triple, 2), dtype=np.int64)
-
-    start = 0
-    cs = 0
-    for n in n_bond_per_atom:
-        if n > 0:
-            """triple_bond_indices is generated from all pair permutations of
-            atom indices.
-
-            The
-            numpy version below does this with much greater efficiency. The equivalent slow
-            code is:
-            ```
-            for j, k in itertools.permutations(range(n), 2):
-                triple_bond_indices[index] = [start + j, start + k]
-            ```
-            """
-            r = np.arange(n)
-            x, y = np.meshgrid(r, r)
-            c = np.stack([y.ravel(), x.ravel()], axis=1)
-            final = c[c[:, 0] != c[:, 1]]
-            triple_edge_idx[start : start + (n * (n - 1)), :] = final + cs  # noqa: E203
-            start += n * (n - 1)
-            cs += n
-
-    return triple_edge_idx
-
-
-def _schmidt_3d(nearest_vec: ndarray) -> ndarray:
-    # nearest_vec is matrix with coordinate components arranged in the column direction
-    if nearest_vec.shape != (3, 2):
-        errm = f"nearest_vec must be (3, 2) shape, but got {nearest_vec.shape}"
-        logging.error(errm)
-        raise ValueError(errm)
-    nearest_vec = np.array(nearest_vec, dtype=np.float64)
-    # get first basis vector
-    nearest_vec[:, 0] /= np.linalg.norm(nearest_vec[:, 0])
-    # get second basis vector
-    nearest_vec[:, 1] -= np.dot(nearest_vec[:, 0], nearest_vec[:, 1]) * nearest_vec[:, 0]
-    nearest_vec[:, 1] /= np.linalg.norm(nearest_vec[:, 1])
-    # get third basis vector
-    cross = np.cross(nearest_vec[:, 0], nearest_vec[:, 1])
-    cross /= np.linalg.norm(cross)
-    # concatenate
-    q = np.concatenate([nearest_vec, cross[:, np.newaxis]], axis=1)
-    return q  # (3, 3) shape
-
-
-def _set_data(
-    data: Data,
-    k: str,
-    v: int | float | ndarray | Tensor,
-    add_dim: bool,
-    add_batch: bool,
-    dtype: torch.dtype,
-):
-    if add_dim:
-        val = torch.tensor([v], dtype=dtype)
-    else:
-        val = torch.tensor(v, dtype=dtype)
-    data[k] = val.unsqueeze(0) if add_batch else val
-
-
-def set_properties(
-    data: Data,
-    k: str,
-    v: int | float | str | ndarray | Tensor,
-    add_batch: bool = True,
-):
-    if isinstance(v, int):
-        _set_data(data, k, v, add_dim=True, add_batch=add_batch, dtype=torch.long)
-    elif isinstance(v, float):
-        _set_data(data, k, v, add_dim=True, add_batch=add_batch, dtype=torch.float32)
-    elif isinstance(v, str):
-        data[k] = v
-    elif len(v.shape) == 0:
-        # for 0-dim array
-        if isinstance(v, ndarray):
-            dtype = torch.long if v.dtype == int else torch.float32
-        elif isinstance(v, Tensor):
-            dtype = v.dtype
-        else:
-            raise ValueError(f"Unknown type of {v}")
-        _set_data(data, k, v, add_dim=True, add_batch=add_batch, dtype=dtype)
-    else:
-        # for array-like
-        if isinstance(v, ndarray):
-            dtype = torch.long if v.dtype == int else torch.float32
-        elif isinstance(v, Tensor):
-            dtype = v.dtype
-        else:
-            raise ValueError(f"Unknown type of {v}")
-        _set_data(data, k, v, add_dim=False, add_batch=add_batch, dtype=dtype)
 
 
 def graphdata2atoms(data: Data) -> ase.Atoms:
