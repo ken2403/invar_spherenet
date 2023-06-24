@@ -4,7 +4,7 @@ import inspect
 class GraphKeys:
     """Class that holds the name of the data key.
 
-    B: batch, N: node, E: edge, NB: n_neighbor_basis, E_NB: n_edge_neighbor_basis
+    B: batch, N: node, E: edge, T: triplets, NB: n_neighbor_basis, E_NB: n_edge_neighbor_basis
     """
 
     # graph-wise information
@@ -25,6 +25,11 @@ class GraphKeys:
     Edge_shift = "edge_shift"  # edge shift of lattice of (E, 3) shape
     Edge_dist_st = "edge_dist"  # edge distances ||r_st|| of (E) shape
     Edge_vec_st = "edge_vec"  # edge vectors r_st of (E, 3) shape
+
+    # tiplets
+    T_edge_idx_kt = "t_edge_idx_kt"  # edge index of (T) shape
+    T_edge_idx_st = "t_edge_idx_st"  # edge index of (T) shape
+    T_ragged_idx = "t_ragged_idx"  # ragged index of (T) shape
 
     # neighbor basis information
     Rot_mat = "rotation_matrix"  # atomic rotation matrix of (NB, 3, 3) shape
