@@ -110,6 +110,7 @@ class FilesDataConverter(BaseDataConverter):
             torch.save(data, f"{self.save_dir}/{i}.pt")
 
 
+# Main transformer to create edge information and rotation matrix
 def atoms2graphdata(
     atoms: ase.Atoms,
     subtract_center_of_mass: bool,
