@@ -95,8 +95,8 @@ class InvarianceSphereNet(BaseMPNN):
         self.mlp_rbf_out = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
         self.mlp_rbf3 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
         self.mlp_cbf3 = EfficientInteractionDownProjection(
+            max_l,
             max_n * max_l,
-            max_n,
             emb_size_cbf,
             torch_geometric.nn.inits.glorot_orthogonal,
             scale=2.0,
@@ -108,7 +108,7 @@ class InvarianceSphereNet(BaseMPNN):
             self.mlp_cbf4_b2 = Dense(max_n * max_l, emb_size_cbf4, bias=False, weight_init=wi)
             self.mlp_sbf4 = EfficientInteractionDownProjection(
                 max_n * max_l * max_l,
-                max_n,
+                max_n * max_l,
                 emb_size_sbf,
                 torch_geometric.nn.inits.glorot_orthogonal,
                 scale=2.0,
