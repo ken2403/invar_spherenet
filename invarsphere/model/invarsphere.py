@@ -937,7 +937,7 @@ class QuadrupletInteraction(nn.Module):
             emb_quad,
             emb_size_sbf,
             emb_quad,
-            torch_geometric.nn.inits.glorotorthogonal,
+            torch_geometric.nn.inits.glorot_orthogonal,
             scale=2.0,
         )
         self.scale_sbf_sum = ScaleFactor()
@@ -1047,7 +1047,7 @@ class TripletInteraction(nn.Module):
             emb_triplet,
             emb_size_cbf,
             emb_bilinear,
-            torch_geometric.nn.inits.glorotorthogonal,
+            torch_geometric.nn.inits.glorot_orthogonal,
             scale=2.0,
         )
         self.scale_cbf_sum = ScaleFactor()
