@@ -81,13 +81,7 @@ class EfficientInteractionBilinear(nn.Module):
         weight_init (callable): Initializer of the weight matrix.
     """
 
-    def __init__(
-        self,
-        emb_size: int,
-        emb_size_interm: int,
-        units_out: int,
-        weight_init: Callable[[Tensor], Tensor],
-    ):
+    def __init__(self, emb_size: int, emb_size_interm: int, units_out: int, weight_init: Callable[[Tensor], Tensor]):
         super().__init__()
         self.emb_size = emb_size
         self.emb_size_interm = emb_size_interm

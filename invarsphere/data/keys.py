@@ -40,9 +40,11 @@ class GraphKeys:
 
     # edge neighbor basis information
     Theta = "theta"  # azimuthal angles of (E_NB) shape
-    Phi = "phi"  # polar angles of (E_NB) shape
+    Phi_b1 = "phi_b1"  # polar angles with first basis of (E_NB) shape
+    Phi_b2 = "phi_b2"  # polar angles with second basis of (E_NB) shape
     Edge_nb_idx = "edge_nb_idx"  # edge neighbor index of (E_NB) shape, used to aggregate E_NB->E or extend E->E_NB
     Nb_edge_idx = "nb_edge_idx"  # neighbor edge index of (E_NB) shape, used to extend NB->E_NB
+    Edge_nb_ragged_idx = "edge_nb_ragged_idx"  # ragged index of (E_NB) shape
 
 
 KEYS = [

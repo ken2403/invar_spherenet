@@ -17,20 +17,31 @@ from ..utils.repeat_tensor import block_repeat
 class SphericalHarmonicsWithBessel(nn.Module):
     """Combine spherical Harmonics function and spherical Bessel fucntion."""
 
-    def __init__(self, max_n: int, max_l: int, cutoff: float, use_phi: bool):
+    def __init__(
+        self,
+        max_n: int,
+        max_l: int,
+        cutoff: float,
+        cutoff_net: nn.Module | None,
+        use_phi: bool,
+        efficient: bool = False,
+    ):
         """
         Args:
             max_n (int): max number of roots used in each l
             max_l (int): max degree of spherical harmonics (excluding l)
             cutoff (float): cutoff radius
+            cutoff_net (torch.nn.Module | None): The torch.nn.Module of cutoff function
             use_phi (bool): whether to use the polar angle. If not, the function will compute `Y_l^0` only
+            efficient (bool): whether to use the efficient bilinear.
         """
         super().__init__()
         self.max_n = max_n
         self.max_l = max_l
         self.cutoff = cutoff
         self.use_phi = use_phi
-        self.sbb = SphericalBesselFunction(max_n, max_l, cutoff, smooth=False)
+        self.efficient = efficient
+        self.sbb = SphericalBesselFunction(max_n, max_l, cutoff, cutoff_net, smooth=False)
         self.shb = SphericalHarmonicsFunction(max_l, use_phi)
 
     def combine_sbb_shb(self, sbb: Tensor, shb: Tensor):
@@ -69,37 +80,50 @@ class SphericalHarmonicsWithBessel(nn.Module):
             shape *= self.max_l
         return (expanded_sbb * expanded_shb).view(-1, shape)
 
-    def forward(self, r: Tensor, theta: Tensor, phi: Tensor | None = None) -> Tensor:
+    def forward(self, r: Tensor, costheta: Tensor, phi: Tensor | None = None) -> Tensor | tuple[Tensor, Tensor]:
         """
         Args:
             r (torch.Tensor): distance Tensor with (*) shape
-            theta (torch.Tensor): the azimuthal angle with (*) shape
+            theta (torch.Tensor): the azimuthal angle cosine values with (*) shape
             phi (torch.Tensor | None): the polar angle with (*) shape
         """
         sbb = self.sbb(r)
-        shb = self.shb(theta, phi)
+        shb = self.shb(costheta, phi)
 
-        combined_basis = self.combine_sbb_shb(sbb, shb)
+        if not self.efficient:
+            combined_basis = self.combine_sbb_shb(sbb, shb)
+            return combined_basis  # (*, max_n*max_l*max_l) or (*, max_n*max_l)
 
-        return combined_basis
+        # sbb: (1, *, max_n*max_l)
+        # shb: (*, max_l) or (*, max_l*max_l)
+        return sbb[None, :, :], shb
 
 
 class SphericalBesselFunction(nn.Module):
     """Calculate the spherical Bessel function based on the sympy + torch
     implementations."""
 
-    def __init__(self, max_n: int = 5, max_l: int = 6, cutoff: float = 5.0, smooth: bool = False):
+    def __init__(
+        self,
+        max_n: int = 5,
+        max_l: int = 6,
+        cutoff: float = 5.0,
+        cutoff_net: nn.Module | None = None,
+        smooth: bool = False,
+    ):
         """
         Args:
             max_n (int): max number of roots used in each l
             max_l (int): max order (excluding l)
             cutoff (float): cutoff radius
+            cutoff_net (torch.nn.Module | None): The torch.nn.Module of cutoff function
             smooth (bool): whether to use smooth version of spherical Bessel function
         """
         super().__init__()
         self.max_n = max_n
         self.max_l = max_l
         self.cutoff = cutoff
+        self.cn = cutoff_net
         self.smooth = smooth
         if smooth:
             self.funcs = self._calculate_smooth_symbolic_funcs()
@@ -110,7 +134,9 @@ class SphericalBesselFunction(nn.Module):
 
     def extra_repr(self) -> str:
         max_l = 0 if self.smooth else self.max_l
-        return f"max_n={self.max_n}, max_l={max_l}, cutoff={self.cutoff}, smooth={bool(self.smooth)}"
+        return (
+            f"max_n={self.max_n}, max_l={max_l}, cutoff={self.cutoff}, cutoff_net={self.cn}, smooth={bool(self.smooth)}"
+        )
 
     @staticmethod
     def rbf_j0(r: Tensor, cutoff: float = 5.0, max_n: int = 3) -> Tensor:
@@ -211,7 +237,12 @@ class SphericalBesselFunction(nn.Module):
             sbb = self._call_smooth_sbf(r)
         else:
             sbb = self._call_sbf(r)
-        return sbb.to(r.dtype)
+
+        sbb = sbb.to(r.dtype)
+        if self.cn is not None:
+            sbb = sbb * self.cn(r / self.cutoff).unsqueeze(-1)
+
+        return sbb
 
 
 class SphericalHarmonicsFunction(nn.Module):
