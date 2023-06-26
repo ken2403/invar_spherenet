@@ -511,9 +511,9 @@ class InvarianceSphereNet(BaseMPNN):
         if not self.triplets_only:
             # theta is the angle between m_st and the plane made by the first and second proximity
             theta: Tensor = graph[GraphKeys.Theta]  # (E_NB)
-            sbf4 = self.sbf(d_st[edge_nb_idx], phi_b1, theta)  # (E_NB, max_n*max_l*max_l)
+            rad_sbf4, sbf4 = self.sbf(d_st, phi_b1, theta)  # (E_NB, max_n*max_l*max_l)
             # transform sbf to (E_NB, emb_size_sbf)
-            sbf4 = self.mlp_sbf4(sbf4)  # (E_NB, emb_size_sbf)
+            sbf4 = self.mlp_sbf4(rad_sbf4, sbf4, edge_nb_idx, edge_nb_ragged_idx)  # (E_NB, emb_size_sbf)
         else:
             sbf4 = None
 
