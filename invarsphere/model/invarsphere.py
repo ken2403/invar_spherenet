@@ -98,7 +98,7 @@ class InvarianceSphereNet(BaseMPNN):
             max_n * max_l,
             max_n,
             emb_size_cbf,
-            wi if wi is not None else torch_geometric.nn.inits.glorot_orthogonal,
+            torch_geometric.nn.inits.glorot_orthogonal,
             scale=2.0,
         )
         if not triplets_only:
@@ -110,7 +110,7 @@ class InvarianceSphereNet(BaseMPNN):
                 max_n * max_l * max_l,
                 max_n,
                 emb_size_sbf,
-                wi if wi is not None else torch_geometric.nn.inits.glorot_orthogonal,
+                torch_geometric.nn.inits.glorot_orthogonal,
                 scale=2.0,
             )
 
@@ -937,7 +937,8 @@ class QuadrupletInteraction(nn.Module):
             emb_quad,
             emb_size_sbf,
             emb_quad,
-            weight_init if weight_init is not None else torch_geometric.nn.inits.glorotorthogonal,
+            torch_geometric.nn.inits.glorotorthogonal,
+            scale=2.0,
         )
         self.scale_sbf_sum = ScaleFactor()
 
@@ -1046,7 +1047,8 @@ class TripletInteraction(nn.Module):
             emb_triplet,
             emb_size_cbf,
             emb_bilinear,
-            weight_init if weight_init is not None else torch_geometric.nn.inits.glorotorthogonal,
+            torch_geometric.nn.inits.glorotorthogonal,
+            scale=2.0,
         )
         self.scale_cbf_sum = ScaleFactor()
 
