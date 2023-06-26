@@ -14,13 +14,21 @@ class EfficientInteractionDownProjection(nn.Module):
         emb_size_interm (int): Intermediate embedding size (down-projection size).
     """
 
-    def __init__(self, n_spherical: int, n_radial: int, emb_size_interm: int, weight_init: Callable[[Tensor], Tensor]):
+    def __init__(
+        self,
+        n_spherical: int,
+        n_radial: int,
+        emb_size_interm: int,
+        weight_init: Callable[[Tensor], Tensor],
+        **kwargs,
+    ):
         super().__init__()
 
         self.n_spherical = n_spherical
         self.n_radial = n_radial
         self.emb_size_interm = emb_size_interm
         self.wi = weight_init
+        self.kwargs = kwargs
 
         self.reset_parameters()
 
@@ -29,7 +37,7 @@ class EfficientInteractionDownProjection(nn.Module):
             torch.empty((self.n_spherical, self.n_radial, self.emb_size_interm)),
             requires_grad=True,
         )
-        self.wi(self.weight)
+        self.wi(self.weight, **self.kwargs)
 
     def forward(self, rbf: Tensor, sph: Tensor, id_st: Tensor, id_ragged_idx: Tensor):
         """
@@ -81,12 +89,20 @@ class EfficientInteractionBilinear(nn.Module):
         weight_init (callable): Initializer of the weight matrix.
     """
 
-    def __init__(self, emb_size: int, emb_size_interm: int, units_out: int, weight_init: Callable[[Tensor], Tensor]):
+    def __init__(
+        self,
+        emb_size: int,
+        emb_size_interm: int,
+        units_out: int,
+        weight_init: Callable[[Tensor], Tensor],
+        **kwargs,
+    ):
         super().__init__()
         self.emb_size = emb_size
         self.emb_size_interm = emb_size_interm
         self.units_out = units_out
         self.wi = weight_init
+        self.kwargs = kwargs
 
         self.reset_parameters()
 
@@ -97,7 +113,7 @@ class EfficientInteractionBilinear(nn.Module):
                 requires_grad=True,
             )
         )
-        self.wi(self.weight)
+        self.wi(self.weight, **self.kwargs)
 
     def forward(self, basis: Tensor, m: Tensor, id_reduce: Tensor, id_ragged_idx: Tensor):
         """

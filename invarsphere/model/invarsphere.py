@@ -98,7 +98,8 @@ class InvarianceSphereNet(BaseMPNN):
             max_n * max_l,
             max_n,
             emb_size_cbf,
-            wi if wi is not None else torch_geometric.nn.inits.glorot_orthogonal(scale=2.0),
+            wi if wi is not None else torch_geometric.nn.inits.glorot_orthogonal,
+            scale=2.0,
         )
         if not triplets_only:
             self.mlp_rbf4_b1 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
@@ -109,7 +110,8 @@ class InvarianceSphereNet(BaseMPNN):
                 max_n * max_l * max_l,
                 max_n,
                 emb_size_sbf,
-                wi if wi is not None else torch_geometric.nn.inits.glorot_orthogonal(scale=2.0),
+                wi if wi is not None else torch_geometric.nn.inits.glorot_orthogonal,
+                scale=2.0,
             )
 
         # embedding block
