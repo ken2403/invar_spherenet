@@ -948,12 +948,12 @@ class QuadrupletInteraction(nn.Module):
         )
         self.scale_sbf_sum = ScaleFactor()
 
-        self.mlp_st = nn.Sequential(
-            Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
+        self.mlp_up_st = nn.Sequential(
+            Dense(emb_quad, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
         )
-        self.mlp_ts = nn.Sequential(
-            Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
+        self.mlp_up_ts = nn.Sequential(
+            Dense(emb_quad, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
         )
 
@@ -1011,11 +1011,11 @@ class QuadrupletInteraction(nn.Module):
         m_st_nb = torch.cat([m_st_b1, m_st_b2], dim=-1)  # (E_NB, emb_quad)
 
         x = self.mlp_sbf(sbf, m_st_nb, edge_nb_idx, edge_nb_ragged_idx)  # (E, emb_quad)
-        x = self.scale_sbf_sum(x, ref=m_st_nb)  # (E_NB, emb_quad)
+        x = self.scale_sbf_sum(x, ref=m_st_nb)  # (E, emb_quad)
 
         # ---------- Update embeddings ----------
-        x_st = self.mlp_st(x)  # (E, emb_size_edge)
-        x_ts = self.mlp_ts(x)  # (E, emb_size_edge)
+        x_st = self.mlp_up_st(x)  # (E, emb_size_edge)
+        x_ts = self.mlp_up_ts(x)  # (E, emb_size_edge)
 
         # Merge interaction of s->t and t->s
         x_ts = x_ts[idx_swap]  # swap to add to edge s->t and not t->s
