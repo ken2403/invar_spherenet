@@ -54,11 +54,9 @@ class EfficientInteractionDownProjection(nn.Module):
         """
         E = rbf.size(1)
 
-        # MatMul: mul + sum over num_radial
-        rbf_W1 = torch.matmul(rbf, self.weight)
-        # (n_spherical, E, emb_size_interm)
-        rbf_W1 = rbf_W1.permute(1, 2, 0)
-        # (E, emb_size_interm, n_spherical)
+        # MatMul: mul + sum over n_radial
+        rbf_W1 = torch.matmul(rbf, self.weight)  # (n_spherical, E, emb_size_interm)
+        rbf_W1 = rbf_W1.permute(1, 2, 0)  # (E, emb_size_interm, n_spherical)
 
         # Zero padded dense matrix
         # maximum number of neighbors, catch empty id_ca with maximum
@@ -75,8 +73,7 @@ class EfficientInteractionDownProjection(nn.Module):
         sph2 = sph.new_zeros(E, Kmax, self.n_spherical)
         sph2[id_st, id_ragged_idx] = sph
 
-        sph2 = torch.transpose(sph2, 1, 2)
-        # (E, n_spherical/emb_size_interm, Kmax)
+        sph2 = torch.transpose(sph2, 1, 2)  # (E, n_spherical/emb_size_interm, Kmax)
 
         return rbf_W1, sph2
 
@@ -127,8 +124,7 @@ class EfficientInteractionBilinear(nn.Module):
             m_st (torch.Tensor): shape=(E, units_out) Edge embeddings.
         """
         # n_spherical is actually n_spherical**2 for quadruplets
-        (rbf_W1, sph) = basis
-        # (E, emb_size_interm, n_spherical), (E, n_spherical, Kmax)
+        (rbf_W1, sph) = basis  # (E, emb_size_interm, n_spherical), (E, n_spherical, Kmax)
         E = rbf_W1.size(0)
 
         # Create (zero-padded) dense matrix of the neighboring edge embeddings.
@@ -146,13 +142,10 @@ class EfficientInteractionBilinear(nn.Module):
         sum_k = torch.matmul(sph, m2)  # (E, n_spherical, emb_size)
 
         # MatMul: mul + sum over num_spherical
-        rbf_W1_sum_k = torch.matmul(rbf_W1, sum_k)
-        # (E, emb_size_interm, emb_size)
+        rbf_W1_sum_k = torch.matmul(rbf_W1, sum_k)  # (E, emb_size_interm, emb_size)
 
         # Bilinear: Sum over emb_size_interm and emb_size
-        m_st = torch.matmul(rbf_W1_sum_k.permute(2, 0, 1), self.weight)
-        # (emb_size, E, units_out)
-        m_st = torch.sum(m_st, dim=0)
-        # (E, units_out)
+        m_st = torch.matmul(rbf_W1_sum_k.permute(2, 0, 1), self.weight)  # (emb_size, E, units_out)
+        m_st = torch.sum(m_st, dim=0)  # (E, units_out)
 
         return m_st
