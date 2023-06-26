@@ -31,12 +31,12 @@ class EfficientInteractionDownProjection(nn.Module):
         )
         self.wi(self.weight)
 
-    def forward(self, rbf: Tensor, sph: Tensor, id_ca: Tensor, id_ragged_idx: Tensor):
+    def forward(self, rbf: Tensor, sph: Tensor, id_st: Tensor, id_ragged_idx: Tensor):
         """
         Args:
             rbf (torch.Tensor): shape=(1, E, n_radial)
-            sph (torch.Tensor): shape=(E, Kmax, n_spherical)
-            id_ca (torch.Tensor): shape=(E,)
+            sph (torch.Tensor): shape=(E, n_spherical)
+            id_st (torch.Tensor): shape=(E,)
             id_ragged_idx (torch.Tensor): shape=(E,)
 
         Returns:
@@ -65,7 +65,7 @@ class EfficientInteractionDownProjection(nn.Module):
             )
 
         sph2 = sph.new_zeros(E, Kmax, self.n_spherical)
-        sph2[id_ca, id_ragged_idx] = sph
+        sph2[id_st, id_ragged_idx] = sph
 
         sph2 = torch.transpose(sph2, 1, 2)
         # (E, n_spherical/emb_size_interm, Kmax)
