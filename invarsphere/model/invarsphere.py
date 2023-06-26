@@ -41,6 +41,7 @@ class InvarianceSphereNet(BaseMPNN):
         emb_size_edge: int,
         emb_size_rbf: int,
         emb_size_cbf: int,
+        emb_size_rbf4: int,
         emb_size_cbf4: int,
         emb_size_sbf: int,
         emb_triplet: int,
@@ -102,8 +103,8 @@ class InvarianceSphereNet(BaseMPNN):
             scale=2.0,
         )
         if not triplets_only:
-            self.mlp_rbf4_b1 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
-            self.mlp_rbf4_b2 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
+            self.mlp_rbf4_b1 = Dense(max_n, emb_size_rbf4, bias=False, weight_init=wi)
+            self.mlp_rbf4_b2 = Dense(max_n, emb_size_rbf4, bias=False, weight_init=wi)
             self.mlp_cbf4_b1 = Dense(max_n * max_l, emb_size_cbf4, bias=False, weight_init=wi)
             self.mlp_cbf4_b2 = Dense(max_n * max_l, emb_size_cbf4, bias=False, weight_init=wi)
             self.mlp_sbf4 = EfficientInteractionDownProjection(
@@ -125,6 +126,7 @@ class InvarianceSphereNet(BaseMPNN):
                     emb_size_edge,
                     emb_size_rbf,
                     emb_size_cbf,
+                    emb_size_rbf4,
                     emb_size_cbf4,
                     emb_size_sbf,
                     emb_triplet,
@@ -328,8 +330,8 @@ class InvarianceSphereNet(BaseMPNN):
         cnt_bnode = torch.bincount(basis_node_idx, minlength=n_node)
         cnt_edge_s = torch.bincount(idx_s, minlength=n_node)
 
-        edge_nb_idx = block_repeat(idx_s, cnt_edge_s, cnt_bnode, return_index=True)
-        nb_edge_idx = block_repeat_each(rot_mat, cnt_bnode, cnt_edge_s, return_index=True)
+        edge_nb_idx = block_repeat_each(idx_s, cnt_edge_s, cnt_bnode, return_index=True)
+        nb_edge_idx = block_repeat(rot_mat, cnt_bnode, cnt_edge_s, return_index=True)
 
         n_edge_nb = torch.bincount(edge_nb_idx, minlength=idx_s.size(0))
         edge_nb_ragged_idx = ragged_range(n_edge_nb)
@@ -354,8 +356,8 @@ class InvarianceSphereNet(BaseMPNN):
             basis_edge_idx2 (torch.Tensor): edge index of (NB) shape, used to extend E->NB.
 
         Returns:
-            theta (torch.Tensor): the azimuthal angle with (E_NB) shape.
-            cosφ_b1 (torch.Tensor): the polar angle with (E_NB) shape.
+            cosθ (torch.Tensor): the azimuthal angle cosine value with (E_NB) shape.
+            cosφ_b1 (torch.Tensor): the polar angle cosine value with (E_NB) shape.
             cosφ_b2 (torch.Tensor): the angle with second proximity with (E_NB) shape.
         """
         rot_mat = rot_mat[nb_edge_idx]  # (E_NB, 3, 3)
@@ -366,14 +368,14 @@ class InvarianceSphereNet(BaseMPNN):
         # ---------- cart to polar transform ----------
         rot_vec = rot_vec / rot_vec.norm(dim=-1, keepdim=True)
         # Define azimuthal angle as counterclockwise from the y-axis of the second proximity
-        theta = torch.atan2(rot_vec[:, 2], rot_vec[:, 1])  # (E_NB)
+        cosθ = torch.cos(torch.atan2(rot_vec[:, 2], rot_vec[:, 1]))  # (E_NB)
         # The angle of first proximity is the polar angle
         cosφ_b1 = rot_vec[:, 0]  # (E_NB)
 
         # The angle with second proimity
         cosφ_b2 = inner_product_normalized(rot_vec, vec_ij[basis_edge_idx2][nb_edge_idx])  # (E_NB)
 
-        return theta, cosφ_b1, cosφ_b2  # (E_NB)
+        return cosθ, cosφ_b1, cosφ_b2  # (E_NB)
 
     def generate_interaction_graph(self, graph: Batch) -> Batch:
         # batch index
@@ -441,10 +443,10 @@ class InvarianceSphereNet(BaseMPNN):
             graph[GraphKeys.Edge_nb_ragged_idx] = edge_nb_ragged_idx
 
             # rotation transform with node rot_matrix
-            theta, cosφ_b1, cosφ_b2 = self._rot_transform(
+            cosθ, cosφ_b1, cosφ_b2 = self._rot_transform(
                 rot_mat, v_st, nb_edge_idx, edge_nb_idx, graph[GraphKeys.Basis_edge_idx2]
             )
-            graph[GraphKeys.Theta] = theta
+            graph[GraphKeys.Theta] = cosθ
             graph[GraphKeys.Phi_b1] = cosφ_b1
             graph[GraphKeys.Phi_b2] = cosφ_b2
 
@@ -486,16 +488,16 @@ class InvarianceSphereNet(BaseMPNN):
         rbf_out = self.mlp_rbf_out(rbf)  # (E, emb_size_rbf)
         rbf3 = self.mlp_rbf3(rbf)  # (E, emb_size_rbf)
         if not self.triplets_only:
-            rbf4_b1 = self.mlp_rbf4_b1(rbf)  # (E, emb_size_rbf)
-            rbf4_b2 = self.mlp_rbf4_b2(rbf)  # (E, emb_size_rbf)
+            rbf4_b1 = self.mlp_rbf4_b1(rbf)  # (E, emb_size_rbf4)
+            rbf4_b2 = self.mlp_rbf4_b2(rbf)  # (E, emb_size_rbf4)
         else:
             rbf4_b1 = rbf4_b2 = None
 
-        # --- Triplets cbf ---
-        cosφ_kts = inner_product_normalized(v_st[id3_st], v_st[id3_kt])
-        rad_cbf3, cbf3 = self.cbf(d_st, cosφ_kts)  # (T, max_n*max_l)
+        # --- cbf ---
+        cosφ_stk = inner_product_normalized(v_st[id3_st], v_st[id3_kt])
+        rad_cbf3, cbf3 = self.cbf(d_st, cosφ_stk)
         # transform cbf to (T, emb_size_cbf)
-        cbf3 = self.mlp_cbf3(rad_cbf3, cbf3, id3_kt, id3_ragged_idx)  # (T, emb_size_cbf)
+        cbf3 = self.mlp_cbf3(rad_cbf3, cbf3, id3_st, id3_ragged_idx)  # (T, emb_size_cbf)
         if not self.triplets_only:
             phi_b1 = graph[GraphKeys.Phi_b1]
             phi_b2 = graph[GraphKeys.Phi_b2]
@@ -509,9 +511,10 @@ class InvarianceSphereNet(BaseMPNN):
 
         # --- Neighbor basis sbf ---
         if not self.triplets_only:
-            # theta is the angle between m_st and the plane made by the first and second proximity
+            # theta is the azimuthal angle of the neighbor basis
             theta: Tensor = graph[GraphKeys.Theta]  # (E_NB)
-            rad_sbf4, sbf4 = self.sbf(d_st, phi_b1, theta)  # (E_NB, max_n*max_l*max_l)
+            # TODO check acos
+            rad_sbf4, sbf4 = self.sbf(d_st, theta, torch.acos(phi_b1))  # (E_NB, max_n*max_l*max_l)
             # transform sbf to (E_NB, emb_size_sbf)
             sbf4 = self.mlp_sbf4(rad_sbf4, sbf4, edge_nb_idx, edge_nb_ragged_idx)  # (E_NB, emb_size_sbf)
         else:
@@ -521,7 +524,7 @@ class InvarianceSphereNet(BaseMPNN):
         # (N, emb_size) & (E, emb_size)
         h, m_st = self.emb_block(z, rbf, idx_s, idx_t)
         # (B, n_targets) & (E, n_targets)
-        E_t, F_st = self.out_blocks[0](h, m_st, rbf_out, idx_s)
+        E_t, F_st = self.out_blocks[0](h, m_st, rbf_out, idx_t)
 
         # ---------- InteractionBlock and OutputBlock ----------
         for i in range(self.n_blocks):
@@ -655,7 +658,8 @@ class InteractionBlock(nn.Module):
         emb_size_edge: int,
         emb_size_rbf: int,
         emb_size_cbf: int,
-        emb_size_cbf4: int,
+        emb_size_rbf4: int | None,
+        emb_size_cbf4: int | None,
         emb_size_sbf: int | None,
         emb_triplet: int,
         emb_bilinear: int,
@@ -674,11 +678,13 @@ class InteractionBlock(nn.Module):
         # ---------- Geometric MP ----------
         self.mlp_st = Dense(emb_size_edge, emb_size_edge, False, weight_init=weight_init)
         if not triplets_only:
+            assert emb_size_rbf4 is not None
+            assert emb_size_cbf4 is not None
             assert emb_size_sbf is not None
             assert emb_quad is not None
             self.q_mp = QuadrupletInteraction(
                 emb_size_edge,
-                emb_size_rbf,
+                emb_size_rbf4,
                 emb_size_cbf4,
                 emb_size_sbf,
                 emb_quad,
