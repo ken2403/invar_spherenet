@@ -260,21 +260,23 @@ class SphericalHarmonicsFunction(nn.Module):
             else:
                 m_list = [0]
             for m in m_list:
-                func = sympy.expand_func(sympy.functions.special.spherical_harmonics.Znm(lval, m, theta, phi))
+                func = sympy.functions.special.spherical_harmonics.Znm(lval, m, theta, phi)
                 funcs.append(func)
-        results = [sympy.lambdify([theta, phi], sympy.simplify(f).evalf(), modules) for f in funcs]
+        costheta = sympy.symbols("costheta")
+        funcs = [f.subs({theta: sympy.acos(costheta)}) for f in funcs]
+        results = [sympy.lambdify([costheta, phi], sympy.simplify(f).evalf(), modules) for f in funcs]
         results[0] = SphericalHarmonicsFunction._y00
         return results
 
-    def forward(self, theta: Tensor, phi: Tensor | None = None) -> Tensor:
+    def forward(self, costheta: Tensor, phi: Tensor | None = None) -> Tensor:
         """Forward calculation of SphericalHarmonicsBasis.
 
         Args:
-            theta (torch.Tensor): the azimuthal angle with (*) shape
+            costheta (torch.Tensor): the azimuthal angle cosine values with (*) shape
             phi (torch.Tensor | None): the polar angle with (*) shape
 
         Returns:
             shb (torch.Tensor): spherical harmonics basis with (*, max_l) shape if not use_phi, (*, max_l*max_l) shape if use_phi
         """  # noqa: E501
-        shb = torch.stack([f(theta, phi) for f in self.funcs], dim=-1)
-        return shb.to(theta.dtype)
+        shb = torch.stack([f(costheta, phi) for f in self.funcs], dim=-1)
+        return shb.to(costheta.dtype)
