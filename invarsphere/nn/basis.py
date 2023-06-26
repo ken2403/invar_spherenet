@@ -282,14 +282,7 @@ class SphericalHarmonicsFunction(nn.Module):
 
     def _calculate_symbolic_funcs(self) -> list[Callable]:
         theta, phi = sympy.symbols("theta phi")
-        modules = {
-            "sin": torch.sin,
-            "cos": torch.cos,
-            "conjugate": torch.conj,
-            "sqrt": torch.sqrt,
-            "exp": torch.exp,
-            "acos": torch.acos,
-        }
+        modules = {"sin": torch.sin, "cos": torch.cos, "conjugate": torch.conj, "sqrt": torch.sqrt, "exp": torch.exp}
 
         funcs = []
         for lval in range(self.max_l):
@@ -298,7 +291,7 @@ class SphericalHarmonicsFunction(nn.Module):
             else:
                 m_list = [0]
             for m in m_list:
-                func = sympy.functions.special.spherical_harmonics.Znm(lval, m, theta, phi)
+                func = sympy.functions.special.spherical_harmonics.Znm(lval, m, theta, phi).expand(func=True)
                 funcs.append(func)
         costheta = sympy.symbols("costheta")
         funcs = [f.subs({theta: sympy.acos(costheta)}) for f in funcs]
