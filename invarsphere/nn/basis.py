@@ -282,7 +282,14 @@ class SphericalHarmonicsFunction(nn.Module):
 
     def _calculate_symbolic_funcs(self) -> list[Callable]:
         theta, phi = sympy.symbols("theta phi")
-        modules = {"sin": torch.sin, "cos": torch.cos, "conjugate": torch.conj, "sqrt": torch.sqrt, "exp": torch.exp}
+        modules = {
+            "sin": torch.sin,
+            "cos": torch.cos,
+            "conjugate": torch.conj,
+            "sqrt": torch.sqrt,
+            "exp": torch.exp,
+            "acos": torch.acos,
+        }
 
         funcs = []
         for lval in range(self.max_l):
