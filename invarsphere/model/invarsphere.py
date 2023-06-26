@@ -88,7 +88,7 @@ class InvarianceSphereNet(BaseMPNN):
         self.cbf = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, cn, use_phi=False, efficient=True)
         if not triplets_only:
             self.cbf4 = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, cn, use_phi=False)
-            self.sbf = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, cn, use_phi=True)
+            self.sbf = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, cn, use_phi=True, efficient=True)
 
         # shared layers
         self.mlp_rbf_h = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
