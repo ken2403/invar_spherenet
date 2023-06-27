@@ -497,7 +497,7 @@ class InvarianceSphereNet(BaseMPNN):
         cosφ_stk = inner_product_normalized(v_st[id3_st], v_st[id3_kt])
         rad_cbf3, cbf3 = self.cbf(d_st, cosφ_stk)
         # transform cbf to (T, emb_size_cbf)
-        cbf3 = self.mlp_cbf3(rad_cbf3, cbf3, id3_st, id3_ragged_idx)  # (T, emb_size_cbf)
+        cbf3 = self.mlp_cbf3(rad_cbf3, cbf3, id3_kt, id3_ragged_idx)  # (T, emb_size_cbf)
         if not self.triplets_only:
             phi_b1 = graph[GraphKeys.Phi_b1]
             phi_b2 = graph[GraphKeys.Phi_b2]
@@ -1095,7 +1095,7 @@ class TripletInteraction(nn.Module):
         # ---------- Geometric MP ----------
         # basis representation
         # rbf(d_kt)
-        # cbf(d_st, angle_kts)
+        # cbf(d_kt, angle_stk)
         # --- rbf ---
         m_kt = self.dense_m_kt(m_st)  # (E, emb_size_edge)
         rbf = self.mlp_rbf(rbf)  # (E, emb_size_edge)
