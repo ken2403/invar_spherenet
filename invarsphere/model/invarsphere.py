@@ -1134,8 +1134,7 @@ class AtomEmbedding(nn.Module):
         """
         N = h.size(0)
 
-        mlp_rbf = self.mlp_rbf(rbf)  # (E, emb_size_edge)
-        x = m_st * mlp_rbf
+        x = m_st * self.mlp_rbf(rbf)  # (E, emb_size_edge)
 
         x2 = scatter(x, idx_t, dim=0, dim_size=N, reduce="add")
         x = self.scale_sum(x2, ref=m_st)  # (N, emb_size_edge)
