@@ -22,6 +22,9 @@ class SphericalHarmonics2dDirect(nn.Module):
         self.max_l = max_l
         self.normalization = normalization
 
+    def extra_repr(self) -> str:
+        return f"max_l={self.max_l}, normalization={self.normalization}"
+
     def forward(self, costheta: Tensor) -> Tensor:
         """Forward calculation of SphericalHarmonics2dDirect.
 
