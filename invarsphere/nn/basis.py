@@ -240,7 +240,7 @@ class SphericalBesselFunction(nn.Module):
 
         sbb = sbb.to(r.dtype)
         if self.cn is not None:
-            sbb = sbb * self.cn(r / self.cutoff).unsqueeze(-1)
+            sbb = sbb * self.cn(r).unsqueeze(-1)
 
         return sbb
 
