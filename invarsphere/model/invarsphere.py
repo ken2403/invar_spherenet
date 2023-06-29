@@ -564,7 +564,7 @@ class InvarianceSphereNet(BaseMPNN):
             )
 
             # output
-            E, F = self.out_blocks[i](h, m_st, rbf_out, idx_t)
+            E, F = self.out_blocks[i + 1](h, m_st, rbf_out, idx_t)
             E_t += E
             F_st += F
 
