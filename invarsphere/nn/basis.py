@@ -95,6 +95,7 @@ class SphericalHarmonicsWithBessel(nn.Module):
 
     def forward(
         self,
+        # TODO modify variable name
         r: Tensor,
         costheta: Tensor | None = None,
         phi: Tensor | None = None,
