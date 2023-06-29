@@ -39,6 +39,7 @@ class GraphKeys:
     Basis_edge_idx3 = "basis_edge_idx_3"  # edge index between the first and second proximity of (NB) shape, used to extend E->NB # noqa: E501
 
     # edge neighbor basis information
+    Rotated_vec = "rotated_vec"  # rotated edge vector of (E_NB, 3) shape
     Theta = "theta"  # azimuthal angles of (E_NB) shape
     Phi_b1 = "phi_b1"  # polar angles with first basis of (E_NB) shape
     Phi_b2 = "phi_b2"  # polar angles with second basis of (E_NB) shape
