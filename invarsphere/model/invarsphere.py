@@ -51,10 +51,11 @@ class InvarianceSphereNet(BaseMPNN):
         max_l: int,
         triplets_only: bool = True,
         rbf_smooth: bool = True,
+        use_direct_basis: bool = True,
         cutoff: float = 6.0,
         cutoff_net: str | type[BaseCutoff] = "envelope",
         cutoff_kwargs: dict[str, Any] = {},
-        n_residual_output: int = 2,
+        n_residual_output: int = 1,
         max_z: int | None = None,
         extensive: bool = True,
         regress_forces: bool = True,
@@ -74,6 +75,7 @@ class InvarianceSphereNet(BaseMPNN):
         self.max_l = max_l
         self.triplets_only = triplets_only
         self.rbf_smooth = rbf_smooth
+        self.use_direct_basis = use_direct_basis
         self.cutoff = cutoff
         self.extensive = extensive
         self.regress_forces = regress_forces
@@ -84,10 +86,14 @@ class InvarianceSphereNet(BaseMPNN):
         cutoff_kwargs["cutoff"] = cutoff
         cn = cutoffnet_resolver(cutoff_net, **cutoff_kwargs)
         self.rbf = SphericalBesselFunction(max_n, 1, cutoff, None if rbf_smooth else cn, rbf_smooth)
-        self.cbf = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, cn, use_phi=False, efficient=True)
+        self.cbf = SphericalHarmonicsWithBessel(
+            max_n, max_l, cutoff, cn, use_phi=False, efficient=True, use_direct_basis=use_direct_basis
+        )
         if not triplets_only:
             # self.cbf4 = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, cn, use_phi=False)
-            self.sbf = SphericalHarmonicsWithBessel(max_n, max_l, cutoff, cn, use_phi=True, efficient=True)
+            self.sbf = SphericalHarmonicsWithBessel(
+                max_n, max_l, cutoff, cn, use_phi=True, efficient=True, use_direct_basis=use_direct_basis
+            )
 
         # shared layers
         self.mlp_rbf_h = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
@@ -337,7 +343,7 @@ class InvarianceSphereNet(BaseMPNN):
         nb_edge_idx: Tensor,
         edge_nb_idx: Tensor,
         basis_edge_idx2: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor]:
+    ) -> Tensor | tuple[Tensor, Tensor, Tensor]:
         """Cartesian to polar transform of edge vector.
 
         Args:
@@ -348,14 +354,19 @@ class InvarianceSphereNet(BaseMPNN):
             basis_edge_idx2 (torch.Tensor): edge index of (NB) shape, used to extend E->NB.
 
         Returns:
-            cosθ (torch.Tensor): the azimuthal angle cosine value with (E_NB) shape.
-            cosφ_b1 (torch.Tensor): the polar angle cosine value with (E_NB) shape.
-            cosφ_b2 (torch.Tensor): the angle with second proximity with (E_NB) shape.
+            if use_direct_basis:
+                rotated_vec (torch.Tesor): the rotated vector with (E_NB, 3) shape.
+            else:
+                cosθ (torch.Tensor): the azimuthal angle cosine value with (E_NB) shape.
+                cosφ_b1 (torch.Tensor): the polar angle cosine value with (E_NB) shape.
+                cosφ_b2 (torch.Tensor): the angle with second proximity with (E_NB) shape.
         """
         rot_mat = rot_mat[nb_edge_idx]  # (E_NB, 3, 3)
 
         # ---------- rotation transform ----------
         rot_vec = torch.einsum("enm,em->en", rot_mat, vec_ij[edge_nb_idx])  # (E_NB, 3)
+        if self.use_direct_basis:
+            return rot_vec  # (E_NB, 3)
 
         # ---------- cart to polar transform ----------
         rot_vec = rot_vec / rot_vec.norm(dim=-1, keepdim=True)
@@ -435,12 +446,13 @@ class InvarianceSphereNet(BaseMPNN):
             graph[GraphKeys.Edge_nb_ragged_idx] = edge_nb_ragged_idx
 
             # rotation transform with node rot_matrix
-            cosθ, cosφ_b1, cosφ_b2 = self._rot_transform(
-                rot_mat, v_st, nb_edge_idx, edge_nb_idx, graph[GraphKeys.Basis_edge_idx2]
-            )
-            graph[GraphKeys.Theta] = cosθ
-            graph[GraphKeys.Phi_b1] = cosφ_b1
-            graph[GraphKeys.Phi_b2] = cosφ_b2
+            out = self._rot_transform(rot_mat, v_st, nb_edge_idx, edge_nb_idx, graph[GraphKeys.Basis_edge_idx2])
+            if self.use_direct_basis:
+                graph[GraphKeys.Rotated_vec] = out
+            else:
+                graph[GraphKeys.Theta] = out[0]
+                graph[GraphKeys.Phi_b1] = out[1]
+                graph[GraphKeys.Phi_b2] = out[2]
 
         return graph
 
@@ -503,11 +515,17 @@ class InvarianceSphereNet(BaseMPNN):
 
         # --- Neighbor basis sbf ---
         if not self.triplets_only:
-            phi_b1 = graph[GraphKeys.Phi_b1]
-            # theta is the azimuthal angle of the neighbor basis
-            theta: Tensor = graph[GraphKeys.Theta]  # (E_NB)
-            # TODO check acos
-            rad_sbf4, sbf4 = self.sbf(d_st, theta, torch.acos(phi_b1))  # (E_NB, max_n*max_l*max_l)
+            if self.use_direct_basis:
+                rot_vec = graph[GraphKeys.Rotated_vec]
+                rad_sbf4, sbf4 = self.sbf(rot_vec)  # (1, E, max_n) and (E_NB, max_n*max_l*max_l)
+            else:
+                phi_b1 = graph[GraphKeys.Phi_b1]
+                # theta is the azimuthal angle of the neighbor basis
+                theta: Tensor = graph[GraphKeys.Theta]  # (E_NB)
+                # TODO check acos
+                rad_sbf4, sbf4 = self.sbf(
+                    d_st, theta, torch.acos(phi_b1)
+                )  # (1, E, max_n) and (E_NB, max_n*max_l*max_l)
             # transform sbf to (E_NB, emb_size_sbf)
             sbf4 = self.mlp_sbf4(rad_sbf4, sbf4, edge_nb_idx, edge_nb_ragged_idx)  # (E_NB, emb_size_sbf)
         else:
@@ -1004,14 +1022,15 @@ class TripletInteraction(nn.Module):
     ):
         super().__init__()
 
-        self.dense_m_kt = Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init)
+        self.mlp_m_kt = nn.Sequential(
+            Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
+            activation,
+        )
 
         self.mlp_rbf = Dense(emb_size_rbf, emb_size_edge, bias=False, weight_init=weight_init)
         self.scale_rbf = ScaleFactor()
 
-        self.dense_down = Dense(emb_size_edge, emb_triplet, bias=False, weight_init=weight_init)
-
-        self.mlp_m_cbf = nn.Sequential(
+        self.mlp_down = nn.Sequential(
             Dense(emb_size_edge, emb_triplet, bias=False, weight_init=weight_init),
             activation,
         )
@@ -1063,12 +1082,12 @@ class TripletInteraction(nn.Module):
         # rbf(d_kt)
         # cbf(d_kt, angle_stk)
         # --- rbf ---
-        m_kt = self.dense_m_kt(m_st)  # (E, emb_size_edge)
+        m_kt = self.mlp_m_kt(m_st)  # (E, emb_size_edge)
         rbf = self.mlp_rbf(rbf)  # (E, emb_size_edge)
         m_kt_rbf = m_kt * rbf  # (E, emb_size_edge)
         m_kt = self.scale_rbf(m_kt_rbf, ref=m_kt)  # (E, emb_size_edge)
 
-        m_kt = self.dense_down(m_kt)  # (E, emb_triplet)
+        m_kt = self.mlp_down(m_kt)  # (E, emb_triplet)
         m_kt = m_kt[id3_kt]  # (T, emb_triplet)
 
         # --- cbf ---
