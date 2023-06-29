@@ -517,7 +517,7 @@ class InvarianceSphereNet(BaseMPNN):
         if not self.triplets_only:
             if self.use_direct_basis:
                 rot_vec = graph[GraphKeys.Rotated_vec]
-                rad_sbf4, sbf4 = self.sbf(rot_vec)  # (1, E, max_n) and (E_NB, max_n*max_l*max_l)
+                rad_sbf4, sbf4 = self.sbf(d_st, rot_vec)  # (1, E, max_n) and (E_NB, max_n*max_l*max_l)
             else:
                 phi_b1 = graph[GraphKeys.Phi_b1]
                 # theta is the azimuthal angle of the neighbor basis
