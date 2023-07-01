@@ -147,11 +147,7 @@ def atoms2graphdata(
         check_index = int(max_n_neighbor_basis**0.5 + 1)
         rm = []
         basis_node_idx = []
-        basis_edge_idx1 = []
-        basis_edge_idx2 = []
-        # basis_edge_idx3 = []
 
-    n_ind = 0
     unique = np.unique(edge_src)
     for i in unique:
         center_mask = edge_src == i
@@ -194,13 +190,8 @@ def atoms2graphdata(
                 # The index of the edge is sorted,
                 # so it stores how many indexes are in the range (i.e., i1)
                 basis_node_idx.append(i)
-                basis_edge_idx1.append(triple_edge_idx[i1][0] + n_ind)
-                basis_edge_idx2.append(triple_edge_idx[i1][1] + n_ind)
                 cnt += 1
                 i1 += 1
-
-            # keep n_ind for basis edge_index
-            n_ind += idx_s[-1].shape[0]
 
     if len(idx_s) > 0:
         edge_src = np.concatenate(idx_s, axis=0)
@@ -214,9 +205,6 @@ def atoms2graphdata(
     if max_n_neighbor_basis:
         rotation_matrix_arr = np.array(rm)
         basis_node_idx_arr = np.array(basis_node_idx)
-        basis_edge_idx1_arr = np.array(basis_edge_idx1)
-        basis_edge_idx2_arr = np.array(basis_edge_idx2)
-        # basis_edge_idx3_arr = np.array(basis_edge_idx3)
 
     # edge_index order is "source_to_target"
     data = Data(edge_index=torch.stack([torch.LongTensor(edge_src), torch.LongTensor(edge_dst)], dim=0))
@@ -229,9 +217,6 @@ def atoms2graphdata(
     if max_n_neighbor_basis:
         data[GraphKeys.Rot_mat] = torch.tensor(rotation_matrix_arr, dtype=torch.float32)
         data[GraphKeys.Basis_node_idx] = torch.tensor(basis_node_idx_arr, dtype=torch.long)
-        data[GraphKeys.Basis_edge_idx1] = torch.tensor(basis_edge_idx1_arr, dtype=torch.long)
-        data[GraphKeys.Basis_edge_idx2] = torch.tensor(basis_edge_idx2_arr, dtype=torch.long)
-        # data[GraphKeys.Basis_edge_idx3] = torch.tensor(basis_edge_idx3_arr, dtype=torch.long)
 
     # graph info
     data[GraphKeys.Lattice] = torch.tensor(atoms.cell.array, dtype=torch.float32).unsqueeze(0)
