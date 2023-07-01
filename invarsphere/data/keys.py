@@ -34,17 +34,10 @@ class GraphKeys:
     # neighbor basis information
     Rot_mat = "rotation_matrix"  # atomic rotation matrix of (NB, 3, 3) shape
     Basis_node_idx = "basis_node_index"  # node index of the neighbor basis of (NB) shape, used to aggregate NB->N
-    Basis_edge_idx1 = "basis_edge_idx_1"  # edge index of the first proximity of (NB) shape, used to extend E->NB
-    Basis_edge_idx2 = "basis_edge_idx_2"  # edge index of the second proximity (NB) shape, used to extend E->NB
-    Basis_edge_idx3 = "basis_edge_idx_3"  # edge index between the first and second proximity of (NB) shape, used to extend E->NB # noqa: E501
 
     # edge neighbor basis information
     Rotated_vec = "rotated_vec"  # rotated edge vector of (E_NB, 3) shape
-    Theta = "theta"  # azimuthal angles of (E_NB) shape
-    Phi_b1 = "phi_b1"  # polar angles with first basis of (E_NB) shape
-    Phi_b2 = "phi_b2"  # polar angles with second basis of (E_NB) shape
     Edge_nb_idx = "edge_nb_idx"  # edge neighbor index of (E_NB) shape, used to aggregate E_NB->E or extend E->E_NB
-    Nb_edge_idx = "nb_edge_idx"  # neighbor edge index of (E_NB) shape, used to extend NB->E_NB
     Edge_nb_ragged_idx = "edge_nb_ragged_idx"  # ragged index of (E_NB) shape
 
 
