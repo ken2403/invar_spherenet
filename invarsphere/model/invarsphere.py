@@ -459,14 +459,14 @@ class InvarianceSphereNet(BaseMPNN):
 
         # --- cbf ---
         cosφ_stk = inner_product_normalized(v_st[id3_st], v_st[id3_kt])
-        rad_cbf3, cbf3 = self.cbf(d_st, cosφ_stk)
+        rad_cbf3, cbf3 = self.cbf(d_st, costheta=cosφ_stk)
         # transform cbf to (T, emb_size_cbf)
         cbf3 = self.mlp_cbf3(rad_cbf3, cbf3, id3_kt, id3_ragged_idx)  # (T, emb_size_cbf)
 
         # --- Neighbor basis sbf ---
         if not self.triplets_only:
             rot_vec = graph[GraphKeys.Rotated_vec]
-            rad_sbf4, sbf4 = self.sbf(d_st, rot_vec)  # (1, E, max_n) and (E_NB, max_n*max_l*max_l)
+            rad_sbf4, sbf4 = self.sbf(d_st, vec=rot_vec)  # (1, E, max_n) and (E_NB, max_n*max_l*max_l)
             # transform sbf to (E_NB, emb_size_sbf)
             sbf4 = self.mlp_sbf4(rad_sbf4, sbf4, edge_nb_idx, edge_nb_ragged_idx)  # (E_NB, emb_size_sbf)
         else:
