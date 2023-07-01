@@ -675,8 +675,8 @@ class InteractionBlock(nn.Module):
         m_st: Tensor,
         rbf_h: Tensor,
         rbf3: Tensor,
-        cbf3: Tensor,
-        sbf4: Tensor | None,
+        cbf3: tuple[Tensor, Tensor],
+        sbf4: tuple[Tensor, Tensor] | None,
         idx_s: Tensor,
         idx_t: Tensor,
         idx_swap: Tensor,
@@ -691,7 +691,8 @@ class InteractionBlock(nn.Module):
         x_st_skip = self.mlp_st(m_st)  # (E, emb_size_edge)
 
         if not self.triplets_only:
-            x_nb = self.nb_mp(m_st, sbf4, idx_swap, edge_nb_idx, edge_nb_ragged_idx)
+            assert sbf4 is not None and edge_nb_idx is not None and edge_nb_ragged_idx is not None
+            x_nb = self.nb_mp(m_st, sbf4, idx_s, idx_t, idx_swap, edge_nb_idx, edge_nb_ragged_idx)
         x3 = self.t_mp(m_st, rbf3, cbf3, idx_swap, id3_kt, id3_st, id3_ragged_idx)
 
         # ---------- Merge Embeddings after Quadruplet and Triplet Interaction ----------
