@@ -12,8 +12,6 @@ import torch.nn as nn
 from torch import Tensor
 
 from ..utils.repeat_tensor import block_repeat
-from .direct_2d import SphericalHarmonics2dDirect
-from .direct_3d import SphericalHarmonicsDirect
 
 
 class SphericalHarmonicsWithBessel(nn.Module):
@@ -27,7 +25,6 @@ class SphericalHarmonicsWithBessel(nn.Module):
         cutoff_net: nn.Module | None,
         use_phi: bool,
         efficient: bool = False,
-        use_direct_basis: bool = False,
     ):
         """
         Args:
@@ -37,7 +34,6 @@ class SphericalHarmonicsWithBessel(nn.Module):
             cutoff_net (torch.nn.Module | None): The torch.nn.Module of cutoff function
             use_phi (bool): whether to use the polar angle. If not, the function will compute `Y_l^0` only
             efficient (bool): whether to use the efficient bilinear.
-            use_direct_basis (bool): whether to use the direct basis.
         """
         super().__init__()
         self.max_n = max_n
@@ -45,17 +41,9 @@ class SphericalHarmonicsWithBessel(nn.Module):
         self.cutoff = cutoff
         self.use_phi = use_phi
         self.efficient = efficient
-        self.use_direct_basis = use_direct_basis
 
         self.sbb = SphericalBesselFunction(max_n, max_l, cutoff, cutoff_net, smooth=False)
-
-        if use_direct_basis:
-            if use_phi:
-                self.shb: nn.Module = SphericalHarmonicsDirect(max_l, normalization="component")
-            else:
-                self.shb = SphericalHarmonics2dDirect(max_l, normalization="component")
-        else:
-            self.shb = SphericalHarmonicsFunction(max_l, use_phi)
+        self.shb = SphericalHarmonicsFunction(max_l, use_phi)
 
     def combine_sbb_shb(self, sbb: Tensor, shb: Tensor):
         """Combine the spherical Bessel basis and the spherical Harmonics
@@ -95,32 +83,20 @@ class SphericalHarmonicsWithBessel(nn.Module):
 
     def forward(
         self,
-        # TODO modify variable name
         r: Tensor,
-        costheta: Tensor | None = None,
+        costheta: Tensor,
         phi: Tensor | None = None,
     ) -> Tensor | tuple[Tensor, Tensor]:
         """
         Args:
-            r (torch.Tensor): distance Tensor with (*) shape.
-                if use_direct_basis=True and use_phi=True, then r is directional tensor with (*, 3) shape.
-            theta (torch.Tensor): the azimuthal angle cosine values with (*) shape.
-                if use_direct_basis=True and use_phi=True, then theta is None.
+            r (torch.Tensor): the interatomic distances with (*) shape.
+            costheta (torch.Tensor): the azimuthal angle cosine values with (*) shape.
             phi (torch.Tensor | None): the polar angle with (*) shape
-                if use_direct_basis=True or use_phi=False, then phi is None.
         """
         sbb = self.sbb(r)
-        if self.use_direct_basis:
-            if self.use_phi:
-                shb = self.shb(r / r.norm(keepdim=True, dim=-1))
-            else:
-                assert costheta is not None
-                shb = self.shb(costheta)
-        else:
-            assert costheta is not None
-            if self.use_phi:
-                assert phi is not None
-            shb = self.shb(costheta, phi)
+        if self.use_phi:
+            assert phi is not None
+        shb = self.shb(costheta, phi)
 
         if not self.efficient:
             combined_basis = self.combine_sbb_shb(sbb, shb)
