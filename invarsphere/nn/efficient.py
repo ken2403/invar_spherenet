@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 import torch
 import torch.nn as nn
 from torch import Tensor
+from torch_geometric.nn.inits import glorot_orthogonal
 
 
 class EfficientInteractionDownProjection(nn.Module):
@@ -19,16 +18,12 @@ class EfficientInteractionDownProjection(nn.Module):
         n_spherical: int,
         n_radial: int,
         emb_size_interm: int,
-        weight_init: Callable[[Tensor], Tensor],
-        **kwargs,
     ):
         super().__init__()
 
         self.n_spherical = n_spherical
         self.n_radial = n_radial
         self.emb_size_interm = emb_size_interm
-        self.wi = weight_init
-        self.kwargs = kwargs
 
         self.reset_parameters()
 
@@ -37,7 +32,7 @@ class EfficientInteractionDownProjection(nn.Module):
             torch.empty((self.n_spherical, self.n_radial, self.emb_size_interm)),
             requires_grad=True,
         )
-        self.wi(self.weight, **self.kwargs)
+        glorot_orthogonal(self.weight, scale=2.0)
 
     def forward(self, rbf: Tensor, sph: Tensor, id_st: Tensor, id_ragged_idx: Tensor):
         """
@@ -83,7 +78,6 @@ class EfficientInteractionBilinear(nn.Module):
 
     Args:
         units_out (int): Embedding output size of the bilinear layer.
-        weight_init (callable): Initializer of the weight matrix.
     """
 
     def __init__(
@@ -91,15 +85,11 @@ class EfficientInteractionBilinear(nn.Module):
         emb_size: int,
         emb_size_interm: int,
         units_out: int,
-        weight_init: Callable[[Tensor], Tensor],
-        **kwargs,
     ):
         super().__init__()
         self.emb_size = emb_size
         self.emb_size_interm = emb_size_interm
         self.units_out = units_out
-        self.wi = weight_init
-        self.kwargs = kwargs
 
         self.reset_parameters()
 
@@ -110,7 +100,7 @@ class EfficientInteractionBilinear(nn.Module):
                 requires_grad=True,
             )
         )
-        self.wi(self.weight, **self.kwargs)
+        glorot_orthogonal(self.weight, scale=2.0)
 
     def forward(self, basis: Tensor, m: Tensor, id_reduce: Tensor, id_ragged_idx: Tensor):
         """
