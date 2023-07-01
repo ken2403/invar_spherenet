@@ -13,12 +13,7 @@ class EfficientInteractionDownProjection(nn.Module):
         emb_size_interm (int): Intermediate embedding size (down-projection size).
     """
 
-    def __init__(
-        self,
-        n_spherical: int,
-        n_radial: int,
-        emb_size_interm: int,
-    ):
+    def __init__(self, n_spherical: int, n_radial: int, emb_size_interm: int):
         super().__init__()
 
         self.n_spherical = n_spherical
@@ -80,12 +75,7 @@ class EfficientInteractionBilinear(nn.Module):
         units_out (int): Embedding output size of the bilinear layer.
     """
 
-    def __init__(
-        self,
-        emb_size: int,
-        emb_size_interm: int,
-        units_out: int,
-    ):
+    def __init__(self, emb_size: int, emb_size_interm: int, units_out: int):
         super().__init__()
         self.emb_size = emb_size
         self.emb_size_interm = emb_size_interm
@@ -102,11 +92,11 @@ class EfficientInteractionBilinear(nn.Module):
         )
         glorot_orthogonal(self.weight, scale=2.0)
 
-    def forward(self, basis: Tensor, m: Tensor, id_reduce: Tensor, id_ragged_idx: Tensor):
+    def forward(self, basis: tuple[Tensor, Tensor], m: Tensor, id_reduce: Tensor, id_ragged_idx: Tensor):
         """
         Args
             basis
-            m: quadruplets: m = m_db , triplets: m = m_ba
+            m: NeighborBasis: m = m_st_nb , Triplets: m = m_kt
             id_reduce
             id_ragged_idx
 
