@@ -177,7 +177,7 @@ class InvarianceSphereNet(BaseMPNN):
 
         empty_image = neighbors == 0
         if torch.any(empty_image):
-            logger.warning("Empty images are existed in the dataset.")
+            raise ValueError("Empty images are existed in the dataset.")
         return edge_index, cell_offsets, neighbors, edge_dist, edge_vector
 
     def _select_symmetric_edges(self, tensor: Tensor, mask: Tensor, reorder_idx: Tensor, inverse_neg: bool) -> Tensor:
