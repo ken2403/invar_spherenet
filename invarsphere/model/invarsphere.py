@@ -986,8 +986,10 @@ class TripletInteraction(nn.Module):
         m_kt = m_kt[id3_kt]  # (T, emb_triplet)
 
         # --- cbf ---
-        x = self.mlp_cbf(cbf, m_kt, id3_st, id3_ragged_idx)  # (E, emb_bilinear)
-        x = self.scale_cbf_sum(x, ref=m_kt)  # (E, emb_bilinear)
+        if id3_st.numel() != 0:
+            # check triplets for diatomic molecules
+            x = self.mlp_cbf(cbf, m_kt, id3_st, id3_ragged_idx)  # (E, emb_bilinear)
+            x = self.scale_cbf_sum(x, ref=m_kt)  # (E, emb_bilinear)
 
         # ---------- Update embeddings ----------
         x_st = self.mlp_st(x)  # (E, emb_size_edge)
