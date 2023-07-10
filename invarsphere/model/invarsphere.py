@@ -982,14 +982,15 @@ class TripletInteraction(nn.Module):
         m_kt_rbf = m_kt * self.mlp_rbf(rbf)  # (E, emb_size_edge)
         m_kt = self.scale_rbf(m_kt_rbf, ref=m_kt)  # (E, emb_size_edge)
 
-        m_kt = self.mlp_down(m_kt)  # (E, emb_triplet)
-        m_kt = m_kt[id3_kt]  # (T, emb_triplet)
-
         # --- cbf ---
+        # check triplets for diatomic molecules
         if id3_st.numel() != 0:
-            # check triplets for diatomic molecules
+            m_kt = self.mlp_down(m_kt)  # (E, emb_triplet)
+            m_kt = m_kt[id3_kt]  # (T, emb_triplet)
             x = self.mlp_cbf(cbf, m_kt, id3_st, id3_ragged_idx)  # (E, emb_bilinear)
             x = self.scale_cbf_sum(x, ref=m_kt)  # (E, emb_bilinear)
+        else:
+            x = m_kt
 
         # ---------- Update embeddings ----------
         x_st = self.mlp_st(x)  # (E, emb_size_edge)
