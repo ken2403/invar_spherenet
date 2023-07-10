@@ -144,7 +144,7 @@ def atoms2graphdata(
     idx_t = []
     shift = []
     if max_n_neighbor_basis:
-        check_index = int(max_n_neighbor_basis**0.5 + 1)
+        check_index = int(max_n_neighbor_basis**0.5 + 2)
         rm = []
         basis_node_idx = []
 
