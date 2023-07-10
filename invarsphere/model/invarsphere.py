@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 import math
 from collections.abc import Callable
 from typing import Any
@@ -32,6 +33,8 @@ from ..utils.repeat_tensor import (
 )
 from ..utils.resolve import activation_resolver, cutoffnet_resolver, init_resolver
 from .base import BaseMPNN
+
+logger = logging.getLogger(__name__)
 
 
 class InvarianceSphereNet(BaseMPNN):
@@ -174,7 +177,7 @@ class InvarianceSphereNet(BaseMPNN):
 
         empty_image = neighbors == 0
         if torch.any(empty_image):
-            raise ValueError("Empty images are existed in the dataset.")
+            logger.warning("Empty images are existed in the dataset.")
         return edge_index, cell_offsets, neighbors, edge_dist, edge_vector
 
     def _select_symmetric_edges(self, tensor: Tensor, mask: Tensor, reorder_idx: Tensor, inverse_neg: bool) -> Tensor:
