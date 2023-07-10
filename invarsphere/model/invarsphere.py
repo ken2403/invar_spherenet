@@ -372,13 +372,13 @@ class InvarianceSphereNet(BaseMPNN):
         neighbors: Tensor = graph[GraphKeys.Neighbors]
         d_st: Tensor = graph[GraphKeys.Edge_dist_st]
         v_st: Tensor = graph[GraphKeys.Edge_vec_st]
-        (
-            edge_index,
-            cell_offsets,
-            neighbors,
-            d_st,
-            v_st,
-        ) = self._select_edges(edge_index, cell_offsets, neighbors, d_st, v_st, self.cutoff)
+        # (
+        #     edge_index,
+        #     cell_offsets,
+        #     neighbors,
+        #     d_st,
+        #     v_st,
+        # ) = self._select_edges(edge_index, cell_offsets, neighbors, d_st, v_st, self.cutoff)
         (
             edge_index,
             cell_offsets,
