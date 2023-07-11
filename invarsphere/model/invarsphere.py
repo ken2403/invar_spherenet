@@ -46,8 +46,7 @@ class InvarianceSphereNet(BaseMPNN):
         emb_size_cbf: int = 64,
         emb_size_sbf: int = 64,
         emb_triplet: int = 64,
-        emb_quad: int | None = 32,
-        emb_bilinear: int | None = 64,
+        emb_quad: int | None = 64,
         n_blocks: int = 4,
         n_targets: int = 1,
         max_n: int = 6,
@@ -113,7 +112,6 @@ class InvarianceSphereNet(BaseMPNN):
                     emb_triplet,
                     emb_size_sbf,
                     emb_quad,
-                    emb_bilinear,
                     n_before_skip=1,
                     n_after_skip=1,
                     n_after_atom_self=1,
@@ -607,7 +605,6 @@ class InteractionBlock(nn.Module):
         emb_triplet: int,
         emb_size_sbf: int | None,
         emb_quad: int | None,
-        emb_bilinear: int | None,
         n_before_skip: int,
         n_after_skip: int,
         n_after_atom_self: int,
@@ -624,13 +621,11 @@ class InteractionBlock(nn.Module):
         if not triplets_only:
             assert emb_size_sbf is not None
             assert emb_quad is not None
-            assert emb_bilinear is not None
             self.nb_mp = NearestBasisInteraction(
                 emb_size_atom,
                 emb_size_edge,
                 emb_size_sbf,
                 emb_quad,
-                emb_bilinear,
                 activation,
                 weight_init,
             )
@@ -835,7 +830,6 @@ class NearestBasisInteraction(nn.Module):
         emb_size_edge: int,
         emb_size_sbf: int,
         emb_quad: int,
-        emb_bilinear: int,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
     ):
@@ -846,20 +840,20 @@ class NearestBasisInteraction(nn.Module):
             activation,
         )
 
-        self.mlp_sbf = EfficientInteractionBilinear(emb_quad, emb_size_sbf, emb_bilinear)
+        self.mlp_sbf = EfficientInteractionBilinear(emb_quad, emb_size_sbf, emb_quad)
         self.scale_sbf_sum = ScaleFactor()
 
         self.mlp_m_st = nn.Sequential(
-            Dense(2 * emb_bilinear, emb_bilinear, bias=False, weight_init=weight_init),
+            Dense(2 * emb_quad, emb_quad, bias=False, weight_init=weight_init),
             activation,
         )
 
         self.mlp_st = nn.Sequential(
-            Dense(emb_bilinear, emb_size_edge, bias=False, weight_init=weight_init),
+            Dense(emb_quad, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
         )
         self.mlp_ts = nn.Sequential(
-            Dense(emb_bilinear, emb_size_edge, bias=False, weight_init=weight_init),
+            Dense(emb_quad, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
         )
 
@@ -892,11 +886,11 @@ class NearestBasisInteraction(nn.Module):
 
         h_t = h_t[idx_t][edge_nb_idx]  # (E_NB, emb_quad)
 
-        h_sbf = self.mlp_sbf(sbf, h_t, edge_nb_idx, edge_nb_ragged_idx)  # (E, emb_bilinear)
-        h_sbf = scatter(h_sbf, idx_s, dim=0, dim_size=h.size(0), reduce="add")  # (N, emb_bilinear)
-        h_mp = self.scale_sbf_sum(h_sbf, ref=h_t)  # (N, emb_bilinear)
+        h_sbf = self.mlp_sbf(sbf, h_t, edge_nb_idx, edge_nb_ragged_idx)  # (E, emb_quad)
+        h_sbf = scatter(h_sbf, idx_s, dim=0, dim_size=h.size(0), reduce="add")  # (N, emb_quad)
+        h_mp = self.scale_sbf_sum(h_sbf, ref=h_t)  # (N, emb_quad)
 
-        x = self.mlp_m_st(torch.cat([h_mp[idx_s], h_mp[idx_t]], dim=-1))  # (E, emb_bilinear)
+        x = self.mlp_m_st(torch.cat([h_mp[idx_s], h_mp[idx_t]], dim=-1))  # (E, emb_quad)
 
         # ---------- Update embeddings ----------
         x_st = self.mlp_st(x)  # (E, emb_size_edge)
@@ -934,15 +928,15 @@ class TripletInteraction(nn.Module):
             activation,
         )
 
-        self.mlp_cbf = EfficientInteractionBilinear(emb_triplet, emb_size_cbf, emb_size_edge)
+        self.mlp_cbf = EfficientInteractionBilinear(emb_triplet, emb_size_cbf, emb_triplet)
         self.scale_cbf_sum = ScaleFactor()
 
         self.mlp_st = nn.Sequential(
-            Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
+            Dense(emb_triplet, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
         )
         self.mlp_ts = nn.Sequential(
-            Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
+            Dense(emb_triplet, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
         )
 
@@ -982,14 +976,14 @@ class TripletInteraction(nn.Module):
         m_kt = self.scale_rbf(m_kt_rbf, ref=m_kt)  # (E, emb_size_edge)
 
         # --- cbf ---
+        m_kt = self.mlp_down(m_kt)  # (E, emb_triplet)
         # check triplets for diatomic molecules
         if id3_st.numel() != 0:
-            m_kt = self.mlp_down(m_kt)  # (E, emb_triplet)
             m_kt = m_kt[id3_kt]  # (T, emb_triplet)
-            x = self.mlp_cbf(cbf, m_kt, id3_st, id3_ragged_idx)  # (E, emb_size_edge)
-            x = self.scale_cbf_sum(x, ref=m_kt)  # (E, emb_size_edge)
+            x = self.mlp_cbf(cbf, m_kt, id3_st, id3_ragged_idx)  # (E, emb_triplet)
+            x = self.scale_cbf_sum(x, ref=m_kt)  # (E, emb_triplet)
         else:
-            x = m_kt
+            x = m_kt  # (E, emb_triplet)
 
         # ---------- Update embeddings ----------
         x_st = self.mlp_st(x)  # (E, emb_size_edge)
