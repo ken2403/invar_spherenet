@@ -10,6 +10,8 @@ param_nearest_vec2rot_mat_3d = [
     (np.array([[1, 0, 0], [0, 0, 1]])),
     (np.array([[1, 0, 0], [0, 0, -1]])),
     (np.random.randn(3, 2)),
+    (np.random.randn(3, 2) * 10),
+    (np.random.randn(3, 2) * 100),
     (np.random.randint(-10, 10, (3, 2))),
     (np.random.randint(-100, 100, (3, 2)) / 10),
     # error test
@@ -26,10 +28,21 @@ def test_nearest_vec2rot_mat_3d(nearest_vec: ndarray):
         return
 
     out = nearest_vec2rot_mat_3d(nearest_vec)
+    # shape test
     assert out.shape == (3, 3)
+    # orthogonal test
     assert np.allclose(0.0, np.dot(out[:, 0], out[:, 1]))
     assert np.allclose(0.0, np.dot(out[:, 1], out[:, 2]))
     assert np.allclose(0.0, np.dot(out[:, 2], out[:, 0]))
     assert np.allclose(1.0, np.dot(out[:, 0], out[:, 0]))
     assert np.allclose(1.0, np.dot(out[:, 1], out[:, 1]))
     assert np.allclose(1.0, np.dot(out[:, 2], out[:, 2]))
+    # orthonormal test
+    assert np.allclose(1.0, np.linalg.det(out))
+
+    vec = np.random.randn(3)
+    vec_norm = np.linalg.norm(vec)
+
+    # rotation test
+    rot_vec = np.dot(out, vec)
+    assert np.allclose(vec_norm, np.linalg.norm(rot_vec))
