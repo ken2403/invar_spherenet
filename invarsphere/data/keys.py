@@ -4,7 +4,7 @@ import inspect
 class GraphKeys:
     """Class that holds the name of the data key.
 
-    B: batch, N: node, E: edge, NB: n_neighbor_basis, E_NB: n_edge_neighbor_basis
+    B: batch, N: node, E: edge, T: triplets, NB: n_neighbor_basis, E_NB: n_edge_neighbor_basis
     """
 
     # graph-wise information
@@ -26,18 +26,19 @@ class GraphKeys:
     Edge_dist_st = "edge_dist"  # edge distances ||r_st|| of (E) shape
     Edge_vec_st = "edge_vec"  # edge vectors r_st of (E, 3) shape
 
+    # tiplets
+    T_edge_idx_kt = "t_edge_idx_kt"  # edge index of (T) shape
+    T_edge_idx_st = "t_edge_idx_st"  # edge index of (T) shape
+    T_ragged_idx = "t_ragged_idx"  # ragged index of (T) shape
+
     # neighbor basis information
     Rot_mat = "rotation_matrix"  # atomic rotation matrix of (NB, 3, 3) shape
     Basis_node_idx = "basis_node_index"  # node index of the neighbor basis of (NB) shape, used to aggregate NB->N
-    Basis_edge_idx1 = "basis_edge_idx_1"  # edge index of the first proximity of (NB) shape, used to extend E->NB
-    Basis_edge_idx2 = "basis_edge_idx_2"  # edge index of the second proximity (NB) shape, used to extend E->NB
-    Basis_edge_idx3 = "basis_edge_idx_3"  # edge index between the first and second proximity of (NB) shape, used to extend E->NB # noqa: E501
 
     # edge neighbor basis information
-    Theta = "theta"  # azimuthal angles of (E_NB) shape
-    Phi = "phi"  # polar angles of (E_NB) shape
+    Rotated_vec = "rotated_vec"  # rotated edge vector of (E_NB, 3) shape
     Edge_nb_idx = "edge_nb_idx"  # edge neighbor index of (E_NB) shape, used to aggregate E_NB->E or extend E->E_NB
-    Nb_edge_idx = "nb_edge_idx"  # neighbor edge index of (E_NB) shape, used to extend NB->E_NB
+    Edge_nb_ragged_idx = "edge_nb_ragged_idx"  # ragged index of (E_NB) shape
 
 
 KEYS = [

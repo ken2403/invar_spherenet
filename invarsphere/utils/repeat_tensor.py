@@ -254,3 +254,35 @@ def repeat_blocks(
     # Finally index into input array for the group repeated o/p
     res = id_ar.cumsum(0)
     return res
+
+
+def ragged_range(sizes: Tensor) -> Tensor:
+    """Multiple concatenated ranges.
+
+    Examples
+    --------
+        sizes = [1 4 2 3]
+        Return: [0  0 1 2 3  0 1  0 1 2]
+    """
+    assert sizes.dim() == 1
+    if sizes.sum() == 0:
+        return sizes.new_empty(0)
+
+    # Remove 0 sizes
+    sizes_nonzero = sizes > 0
+    if not torch.all(sizes_nonzero):
+        sizes = torch.masked_select(sizes, sizes_nonzero)
+
+    # Initialize indexing array with ones as we need to setup incremental indexing
+    # within each group when cumulatively summed at the final stage.
+    id_steps = torch.ones(int(sizes.sum().item()), dtype=torch.long, device=sizes.device)
+    id_steps[0] = 0
+    insert_index = sizes[:-1].cumsum(0)
+    insert_val = (1 - sizes)[:-1]
+
+    # Assign index-offsetting values
+    id_steps[insert_index] = insert_val
+
+    # Finally index into input array for the group repeated o/p
+    res = id_steps.cumsum(0)
+    return res
