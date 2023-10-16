@@ -371,7 +371,7 @@ def main(cmd_args: argparse.Namespace):
 
     # region save the fitted scale factors
     scale_dict: dict[str, float] = {name: module.scale_factor.item() for name, module in scale_factors.items()}
-    with open(save_dir + "/scale_factors.json", "wb") as f:
+    with open(save_dir + "/scale_factors.json", "w") as f:  # type: ignore
         json.dump(scale_dict, f, indent=4)  # type: ignore
     logger.info(f"Saved scale factors to {save_dir}/scale_factors.json")
     # endregion
