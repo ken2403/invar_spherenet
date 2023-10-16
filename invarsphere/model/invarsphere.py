@@ -90,8 +90,8 @@ class InvarianceSphereNet(BaseMPNN):
         # basis layers
         cutoff_kwargs["cutoff"] = cutoff
         cn = cutoffnet_resolver(cutoff_net, **cutoff_kwargs)
-        if not nb_only:
             self.rbf = SphericalBesselFunction(max_n, 1, cutoff, None if rbf_smooth else cn, rbf_smooth)
+        if not nb_only:
             self.cbf = SphericalHarmonicsWithBesselDirect(max_n, max_l, cutoff, cn, use_phi=False, efficient=True)
         if not triplets_only:
             self.sbf = SphericalHarmonicsWithBesselDirect(max_n, max_l, cutoff, cn, use_phi=True, efficient=True)
