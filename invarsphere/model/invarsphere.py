@@ -52,6 +52,7 @@ class InvarianceSphereNet(BaseMPNN):
         max_n: int = 6,
         max_l: int = 5,
         triplets_only: bool = False,
+        nb_only: bool = False,
         rbf_smooth: bool = True,
         cutoff: float = 6.0,
         cutoff_net: str | type[BaseCutoff] = "envelope",
@@ -75,6 +76,7 @@ class InvarianceSphereNet(BaseMPNN):
         self.max_n = max_n
         self.max_l = max_l
         self.triplets_only = triplets_only
+        self.nb_only = nb_only
         self.rbf_smooth = rbf_smooth
         self.cutoff = cutoff
         self.extensive = extensive
@@ -82,19 +84,24 @@ class InvarianceSphereNet(BaseMPNN):
         self.direct_forces = direct_forces
         self.align_initial_weight = align_initial_weight
 
+        if triplets_only and nb_only:
+            raise ValueError("Triplets only and neighbor basis only cannot be set simultaneously.")
+
         # basis layers
         cutoff_kwargs["cutoff"] = cutoff
         cn = cutoffnet_resolver(cutoff_net, **cutoff_kwargs)
-        self.rbf = SphericalBesselFunction(max_n, 1, cutoff, None if rbf_smooth else cn, rbf_smooth)
-        self.cbf = SphericalHarmonicsWithBesselDirect(max_n, max_l, cutoff, cn, use_phi=False, efficient=True)
+        if not nb_only:
+            self.rbf = SphericalBesselFunction(max_n, 1, cutoff, None if rbf_smooth else cn, rbf_smooth)
+            self.cbf = SphericalHarmonicsWithBesselDirect(max_n, max_l, cutoff, cn, use_phi=False, efficient=True)
         if not triplets_only:
             self.sbf = SphericalHarmonicsWithBesselDirect(max_n, max_l, cutoff, cn, use_phi=True, efficient=True)
 
         # shared layers
         self.mlp_rbf_h = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
         self.mlp_rbf_out = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
-        self.mlp_rbf3 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
-        self.mlp_cbf3 = EfficientInteractionDownProjection(max_l, max_n * max_l, emb_size_cbf)
+        if not nb_only:
+            self.mlp_rbf3 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
+            self.mlp_cbf3 = EfficientInteractionDownProjection(max_l, max_n * max_l, emb_size_cbf)
         if not triplets_only:
             self.mlp_sbf4 = EfficientInteractionDownProjection(max_l * max_l, max_n * max_l, emb_size_sbf)
 
@@ -117,6 +124,7 @@ class InvarianceSphereNet(BaseMPNN):
                     n_after_atom_self=1,
                     n_atom_emb=1,
                     triplets_only=triplets_only,
+                    nb_only=nb_only,
                     activation=act,
                     weight_init=wi,
                 )
@@ -403,10 +411,11 @@ class InvarianceSphereNet(BaseMPNN):
         graph[GraphKeys.Edge_idx_swap] = idx_swap
 
         # triplets
-        id3_kt, id3_st, id3_ragged_idx = self._get_triplets(edge_index, n_node=graph[GraphKeys.Z].size(0))
-        graph[GraphKeys.T_edge_idx_kt] = id3_kt
-        graph[GraphKeys.T_edge_idx_st] = id3_st
-        graph[GraphKeys.T_ragged_idx] = id3_ragged_idx
+        if not self.nb_only:
+            id3_kt, id3_st, id3_ragged_idx = self._get_triplets(edge_index, n_node=graph[GraphKeys.Z].size(0))
+            graph[GraphKeys.T_edge_idx_kt] = id3_kt
+            graph[GraphKeys.T_edge_idx_st] = id3_st
+            graph[GraphKeys.T_ragged_idx] = id3_ragged_idx
 
         # edge neighbor basis information
         if not self.triplets_only:
@@ -441,9 +450,12 @@ class InvarianceSphereNet(BaseMPNN):
         idx_s = idx[0]
         idx_t = idx[1]
         idx_swap: Tensor = graph[GraphKeys.Edge_idx_swap]
-        id3_kt: Tensor = graph[GraphKeys.T_edge_idx_kt]
-        id3_st: Tensor = graph[GraphKeys.T_edge_idx_st]
-        id3_ragged_idx: Tensor = graph[GraphKeys.T_ragged_idx]
+        if not self.nb_only:
+            id3_kt: Tensor = graph[GraphKeys.T_edge_idx_kt]
+            id3_st: Tensor = graph[GraphKeys.T_edge_idx_st]
+            id3_ragged_idx: Tensor = graph[GraphKeys.T_ragged_idx]
+        else:
+            id3_kt = id3_st = id3_ragged_idx = None
         if not self.triplets_only:
             edge_nb_idx = graph[GraphKeys.Edge_nb_idx]
             edge_nb_ragged_idx = graph[GraphKeys.Edge_nb_ragged_idx]
@@ -456,13 +468,19 @@ class InvarianceSphereNet(BaseMPNN):
         # transform rbf to (E, emb_size_rbf)
         rbf_h = self.mlp_rbf_h(rbf)  # (E, emb_size_rbf)
         rbf_out = self.mlp_rbf_out(rbf)  # (E, emb_size_rbf)
-        rbf3 = self.mlp_rbf3(rbf)  # (E, emb_size_rbf)
+        if not self.nb_only:
+            rbf3 = self.mlp_rbf3(rbf)  # (E, emb_size_rbf)
+        else:
+            rbf3 = None
 
         # --- cbf ---
-        cosφ_stk = inner_product_normalized(v_st[id3_st], v_st[id3_kt])
-        rad_cbf3, cbf3 = self.cbf(d_st, costheta=cosφ_stk)
-        # transform cbf to (T, emb_size_cbf)
-        cbf3 = self.mlp_cbf3(rad_cbf3, cbf3, id3_kt, id3_ragged_idx)  # (T, emb_size_cbf)
+        if not self.nb_only:
+            cosφ_stk = inner_product_normalized(v_st[id3_st], v_st[id3_kt])
+            rad_cbf3, cbf3 = self.cbf(d_st, costheta=cosφ_stk)
+            # transform cbf to (T, emb_size_cbf)
+            cbf3 = self.mlp_cbf3(rad_cbf3, cbf3, id3_kt, id3_ragged_idx)  # (T, emb_size_cbf)
+        else:
+            cbf3 = None
 
         # --- Neighbor basis sbf ---
         if not self.triplets_only:
@@ -601,8 +619,8 @@ class InteractionBlock(nn.Module):
         emb_size_atom: int,
         emb_size_edge: int,
         emb_size_rbf: int,
-        emb_size_cbf: int,
-        emb_triplet: int,
+        emb_size_cbf: int | None,
+        emb_triplet: int | None,
         emb_size_sbf: int | None,
         emb_quad: int | None,
         n_before_skip: int,
@@ -610,11 +628,16 @@ class InteractionBlock(nn.Module):
         n_after_atom_self: int,
         n_atom_emb: int,
         triplets_only: bool,
+        nb_only: bool,
         activation: nn.Module,
         weight_init: Callable[[Tensor], Tensor] | None = None,
     ):
         super().__init__()
         self.triplets_only = triplets_only
+        self.nb_only = nb_only
+
+        if triplets_only and nb_only:
+            raise ValueError("Triplets_only and nb_only cannot be True at the same time.")
 
         # ---------- Geometric MP ----------
         self.mlp_st = Dense(emb_size_edge, emb_size_edge, False, weight_init=weight_init)
@@ -629,14 +652,17 @@ class InteractionBlock(nn.Module):
                 activation,
                 weight_init,
             )
-        self.t_mp = TripletInteraction(
-            emb_size_edge,
-            emb_size_rbf,
-            emb_size_cbf,
-            emb_triplet,
-            activation,
-            weight_init,
-        )
+        if not nb_only:
+            assert emb_size_cbf is not None
+            assert emb_triplet is not None
+            self.t_mp = TripletInteraction(
+                emb_size_edge,
+                emb_size_rbf,
+                emb_size_cbf,
+                emb_triplet,
+                activation,
+                weight_init,
+            )
 
         # ---------- Update Edge Embeddings ----------
         # Residual layers before skip connection
@@ -672,8 +698,8 @@ class InteractionBlock(nn.Module):
         h: Tensor,
         m_st: Tensor,
         rbf_h: Tensor,
-        rbf3: Tensor,
-        cbf3: tuple[Tensor, Tensor],
+        rbf3: Tensor | None,
+        cbf3: tuple[Tensor, Tensor] | None,
         sbf4: tuple[Tensor, Tensor] | None,
         idx_s: Tensor,
         idx_t: Tensor,
@@ -691,15 +717,20 @@ class InteractionBlock(nn.Module):
         if not self.triplets_only:
             assert sbf4 is not None and edge_nb_idx is not None and edge_nb_ragged_idx is not None
             x_nb = self.nb_mp(m_st, sbf4, idx_s, idx_t, idx_swap, edge_nb_idx, edge_nb_ragged_idx)
-        x3 = self.t_mp(m_st, rbf3, cbf3, idx_swap, id3_kt, id3_st, id3_ragged_idx)
+        if not self.nb_only:
+            assert cbf3 is not None and rbf3 is not None
+            x3 = self.t_mp(m_st, rbf3, cbf3, idx_swap, id3_kt, id3_st, id3_ragged_idx)
 
         # ---------- Merge Embeddings after Quadruplet and Triplet Interaction ----------
-        if not self.triplets_only:
-            x = x_st_skip + x3 + x_nb  # (E, emb_size_edge)
-            x = x * self.inv_sqrt_3
-        else:
-            x = x_st_skip + x3
+        if self.triplets_only:
+            x = x_st_skip + x3  # (E, emb_size_edge)
             x = x * self.inv_sqrt_2
+        elif self.nb_only:
+            x = x_st_skip + x_nb
+            x = x * self.inv_sqrt_2
+        else:
+            x = x_st_skip + x3 + x_nb
+            x = x * self.inv_sqrt_3
 
         # ---------- Update Edge Embeddings ----------
         for layer in self.residual_before_skip:
