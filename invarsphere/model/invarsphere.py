@@ -651,7 +651,6 @@ class InteractionBlock(nn.Module):
             assert emb_size_sbf is not None
             assert emb_quad is not None
             self.nb_mp = NearestBasisInteraction(
-                emb_size_atom,
                 emb_size_edge,
                 emb_size_rbf,
                 emb_size_sbf,
@@ -865,7 +864,6 @@ class OutputBlock(nn.Module):
 class NearestBasisInteraction(nn.Module):
     def __init__(
         self,
-        emb_size_atom: int,
         emb_size_edge: int,
         emb_size_rbf: int,
         emb_size_sbf: int,
@@ -883,7 +881,7 @@ class NearestBasisInteraction(nn.Module):
         self.scale_rbf = ScaleFactor()
 
         self.mlp_down = nn.Sequential(
-            Dense(emb_size_atom, emb_quad, bias=False, weight_init=weight_init),
+            Dense(emb_size_edge, emb_quad, bias=False, weight_init=weight_init),
             activation,
         )
 
