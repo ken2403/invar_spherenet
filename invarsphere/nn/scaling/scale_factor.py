@@ -53,6 +53,9 @@ class ScaleFactor(nn.Module):
         if enforce_consistency:
             self._register_load_state_dict_pre_hook(self._enforce_consistency)
 
+    def extra_repr(self) -> str:
+        return f"name={self.name}, scale_factor={self.scale_factor.item():.3f}"
+
     def _enforce_consistency(
         self,
         state_dict,
