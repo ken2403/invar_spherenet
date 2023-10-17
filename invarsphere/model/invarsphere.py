@@ -872,7 +872,7 @@ class NearestBasisInteraction(nn.Module):
         weight_init: Callable[[Tensor], Tensor] | None = None,
     ):
         super().__init__()
-        self.mlp_m_st = nn.Sequential(
+        self.mlp_m = nn.Sequential(
             Dense(emb_size_edge, emb_size_edge, bias=False, weight_init=weight_init),
             activation,
         )
@@ -925,7 +925,7 @@ class NearestBasisInteraction(nn.Module):
         Returns:
             x_nb (Tensor): Qudruplet interaction embedding with (E, emb_size_edge) shape.
         """
-        m_st = self.mlp_m_st(m_st)  # (E, emb_size_edge)
+        m_st = self.mlp_m(m_st)  # (E, emb_size_edge)
 
         # ---------- Geometric MP ----------
         # basis representation
