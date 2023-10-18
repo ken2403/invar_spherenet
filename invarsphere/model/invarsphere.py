@@ -718,7 +718,7 @@ class InteractionBlock(nn.Module):
             assert sbf4 is not None and edge_nb_idx is not None and edge_nb_ragged_idx is not None
             x_nb = self.nb_mp(m_st, sbf4, idx_s, idx_t, idx_swap, edge_nb_idx, edge_nb_ragged_idx)
         if not self.nb_only:
-            assert cbf3 is not None and rbf3 is not None
+            assert rbf3 is not None and cbf3 is not None
             x3 = self.t_mp(m_st, rbf3, cbf3, idx_swap, id3_kt, id3_st, id3_ragged_idx)
 
         # ---------- Merge Embeddings after Quadruplet and Triplet Interaction ----------
