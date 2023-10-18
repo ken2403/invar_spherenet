@@ -103,6 +103,7 @@ class InvarianceSphereNet(BaseMPNN):
             self.mlp_rbf3 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
             self.mlp_cbf3 = EfficientInteractionDownProjection(max_l, max_n * max_l, emb_size_cbf)
         if not triplets_only:
+            self.mlp_rbf4 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
             self.mlp_sbf4 = EfficientInteractionDownProjection(max_l * max_l, max_n * max_l, emb_size_sbf)
 
         # embedding block
@@ -472,6 +473,10 @@ class InvarianceSphereNet(BaseMPNN):
             rbf3 = self.mlp_rbf3(rbf)  # (E, emb_size_rbf)
         else:
             rbf3 = None
+        if not self.triplets_only:
+            rbf4 = self.mlp_rbf4(rbf)  # (E, emb_size_rbf)
+        else:
+            rbf4 = None
 
         # --- cbf ---
         if not self.nb_only:
@@ -506,6 +511,7 @@ class InvarianceSphereNet(BaseMPNN):
                 rbf_h,
                 rbf3,
                 cbf3,
+                rbf4,
                 sbf4,
                 idx_s,
                 idx_t,
@@ -645,7 +651,6 @@ class InteractionBlock(nn.Module):
             assert emb_size_sbf is not None
             assert emb_quad is not None
             self.nb_mp = NearestBasisInteraction(
-                emb_size_atom,
                 emb_size_edge,
                 emb_size_sbf,
                 emb_quad,
@@ -716,9 +721,9 @@ class InteractionBlock(nn.Module):
 
         if not self.triplets_only:
             assert sbf4 is not None and edge_nb_idx is not None and edge_nb_ragged_idx is not None
-            x_nb = self.nb_mp(m_st, sbf4, idx_s, idx_t, idx_swap, edge_nb_idx, edge_nb_ragged_idx)
+            x_nb = self.nb_mp(m_st, sbf4, idx_swap, edge_nb_idx, edge_nb_ragged_idx)
         if not self.nb_only:
-            assert cbf3 is not None and rbf3 is not None
+            assert rbf3 is not None and cbf3 is not None
             x3 = self.t_mp(m_st, rbf3, cbf3, idx_swap, id3_kt, id3_st, id3_ragged_idx)
 
         # ---------- Merge Embeddings after Quadruplet and Triplet Interaction ----------
@@ -857,7 +862,6 @@ class OutputBlock(nn.Module):
 class NearestBasisInteraction(nn.Module):
     def __init__(
         self,
-        emb_size_atom: int,
         emb_size_edge: int,
         emb_size_sbf: int,
         emb_quad: int,
@@ -867,7 +871,7 @@ class NearestBasisInteraction(nn.Module):
         super().__init__()
 
         self.mlp_down = nn.Sequential(
-            Dense(emb_size_atom, emb_quad, bias=False, weight_init=weight_init),
+            Dense(emb_size_edge, emb_quad, bias=False, weight_init=weight_init),
             activation,
         )
 
@@ -875,7 +879,7 @@ class NearestBasisInteraction(nn.Module):
         self.scale_sbf_sum = ScaleFactor()
 
         self.mlp_m_st = nn.Sequential(
-            Dense(2 * emb_quad, emb_quad, bias=False, weight_init=weight_init),
+            Dense(emb_quad, emb_quad, bias=False, weight_init=weight_init),
             activation,
         )
 
@@ -892,17 +896,14 @@ class NearestBasisInteraction(nn.Module):
 
     def forward(
         self,
-        h: Tensor,
+        m_st: Tensor,
         sbf: tuple[Tensor, Tensor],
-        idx_s: Tensor,
-        idx_t: Tensor,
         idx_swap: Tensor,
         edge_nb_idx: Tensor,
         edge_nb_ragged_idx: Tensor,
     ) -> Tensor:
         """
         Args:
-            h (Tensor): Atom embedding with (N, emb_size_atom) shape.
             m_st (Tensor): Edge embedding with (E, emb_size_edge) shape.
             sbf (tuple[Tensor, Tensor]): the weighted RBF and SBF with (E_NB, emb_size_sbf) shape.
             idx_swap (Tensor): swap index of edge with (E) shape.
@@ -910,18 +911,18 @@ class NearestBasisInteraction(nn.Module):
             edge_nb_ragged_idx (Tensor): ragged edge index of neighbor basis with (E_nb) shape.
 
         Returns:
-            x4 (Tensor): Qudruplet interaction embedding with (E, emb_size_edge) shape.
+            x_nb (Tensor): Qudruplet interaction embedding with (E, emb_size_edge) shape.
         """
+
         # ---------- Geometric MP ----------
-        h_t = self.mlp_down(h)  # (N, emb_quad)
+        # basis representation
+        # sbf(r_st^s)
+        m_st = self.mlp_down(m_st)  # (N, emb_quad)
 
-        h_t = h_t[idx_t][edge_nb_idx]  # (E_NB, emb_quad)
+        m_st = m_st[edge_nb_idx]  # (E_NB, emb_quad)
 
-        h_sbf = self.mlp_sbf(sbf, h_t, edge_nb_idx, edge_nb_ragged_idx)  # (E, emb_quad)
-        h_sbf = scatter(h_sbf, idx_s, dim=0, dim_size=h.size(0), reduce="add")  # (N, emb_quad)
-        h_mp = self.scale_sbf_sum(h_sbf, ref=h_t)  # (N, emb_quad)
-
-        x = self.mlp_m_st(torch.cat([h_mp[idx_s], h_mp[idx_t]], dim=-1))  # (E, emb_quad)
+        m_st_sbf = self.mlp_sbf(sbf, m_st, edge_nb_idx, edge_nb_ragged_idx)  # (E, emb_quad)
+        x = self.scale_sbf_sum(m_st_sbf, ref=m_st)  # (E, emb_quad)
 
         # ---------- Update embeddings ----------
         x_st = self.mlp_st(x)  # (E, emb_size_edge)
