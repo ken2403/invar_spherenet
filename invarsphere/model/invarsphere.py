@@ -103,7 +103,6 @@ class InvarianceSphereNet(BaseMPNN):
             self.mlp_rbf3 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
             self.mlp_cbf3 = EfficientInteractionDownProjection(max_l, max_n * max_l, emb_size_cbf)
         if not triplets_only:
-            self.mlp_rbf4 = Dense(max_n, emb_size_rbf, bias=False, weight_init=wi)
             self.mlp_sbf4 = EfficientInteractionDownProjection(max_l * max_l, max_n * max_l, emb_size_sbf)
 
         # embedding block
@@ -473,10 +472,6 @@ class InvarianceSphereNet(BaseMPNN):
             rbf3 = self.mlp_rbf3(rbf)  # (E, emb_size_rbf)
         else:
             rbf3 = None
-        if not self.triplets_only:
-            rbf4 = self.mlp_rbf4(rbf)  # (E, emb_size_rbf)
-        else:
-            rbf4 = None
 
         # --- cbf ---
         if not self.nb_only:
@@ -511,7 +506,6 @@ class InvarianceSphereNet(BaseMPNN):
                 rbf_h,
                 rbf3,
                 cbf3,
-                rbf4,
                 sbf4,
                 idx_s,
                 idx_t,
