@@ -37,7 +37,7 @@ setup(
     author="Kento Nishio",
     author_email="knishio@iis.u-tokyo.ac.jp",
     url="https://github.com/",
-    license="Hippocratic",
+    license="MIT",
     keywords=[
         "deep-learning",
         "pytorch",
@@ -46,7 +46,7 @@ setup(
         "materials-informatics",
         "machine-learning-interatomic-potential",
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.9",
     install_requires=install_requires,
     extras_require={
         "test": test_requires,
