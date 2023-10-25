@@ -716,7 +716,7 @@ class InteractionBlock(nn.Module):
 
         if not self.triplets_only:
             assert sbf4 is not None and edge_nb_idx is not None and edge_nb_ragged_idx is not None
-            x_nb = self.nb_mp(m_st, sbf4, idx_s, idx_t, idx_swap, edge_nb_idx, edge_nb_ragged_idx)
+            x_nb = self.nb_mp(h, sbf4, idx_s, idx_t, idx_swap, edge_nb_idx, edge_nb_ragged_idx)
         if not self.nb_only:
             assert rbf3 is not None and cbf3 is not None
             x3 = self.t_mp(m_st, rbf3, cbf3, idx_swap, id3_kt, id3_st, id3_ragged_idx)
