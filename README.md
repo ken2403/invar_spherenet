@@ -6,3 +6,6 @@
 [![isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=grey)](https://pycqa.github.io/isort/)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://pre-commit.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## Schematic diagram of this mehod
+![nb_orange](https://github.com/ken2403/invar_spherenet/assets/64848521/c18231ae-e459-47a6-b2ec-f13307c40eb5)
